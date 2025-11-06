@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 import random
 from itertools import chain
-from typing import List, Set, Tuple, Dict
+from typing import List, Set, Tuple, Dict, Optional
 import numpy as np
 import networkx as nx
 from numpy.typing import NDArray
@@ -58,8 +58,11 @@ class SchreierContext:
         self.u_map: dict[int, int] = {}
         self.u_len: int = 0
         self.u_vector: list[list[NDArray[np.intp]]] = []
+        self.idx_to_node: dict[int, int] = {
+            idx: n for idx, n in enumerate(graph.nodes())
+        }
         self.neighbours: dict[int, set[int]] = {
-            i: set(graph.neighbors(i))
+            self.idx_to_node[i]: set(graph.neighbors(self.idx_to_node[i]))
             for i in range(self.num_nodes)
         }
         self.identity: NDArray[np.intp] = np.array(
@@ -67,6 +70,8 @@ class SchreierContext:
             dtype=np.intp
         )
         self.vertex_block_index: list[int] = [0] * self.num_nodes
+        self.vertex_block_index: dict[int, int] = {n: 0 for n in graph.nodes()}
+
         self.best_perm: NDArray[np.intp] = np.array(
             range(self.num_nodes),
             dtype=np.intp
@@ -186,12 +191,21 @@ class SchreierContext:
                 self.u_vector.append([])
             self.u_vector[self.u_map[i]].append(g)
 
-        # Attempt to compose new automorphisms from random samples 
-        for h in self._sample_from_nested():
-            f = mult(g, h)
-            if (f == self.identity).all(): 
-                continue       
-            self._enter(f)
+        if self.num_samples is None:
+            # Attempt to compose new automorphisms from all transversals 
+            for u_i in self.u_vector:
+                for h in u_i:
+                    f = mult(g, h)
+                    if (f == self.identity).all(): 
+                        continue       
+                    self._enter(f)
+        else:
+            # Attempt to compose new automorphisms from random samples 
+            for h in self._sample_from_nested():
+                f = mult(g, h)
+                if (f == self.identity).all(): 
+                    continue       
+                self._enter(f)
 
     def _change_base(self, beta_prime: NDArray[np.intp]) -> None:
         """Convert the set of coset representatives to a new base.
@@ -338,7 +352,7 @@ class SchreierContext:
     def _canon(self, initial_partition: list[set[int]]) -> None:
         """Generate search tree based on iterative colour refinement and vertex individualization.
         
-        Based on Algorithm 7.7 from Kreher, D. L., & Stinson, D. R. (1999).
+        Based on Algorithm 7.9 from Kreher, D. L., & Stinson, D. R. (1999).
         Combinatorial algorithms: Generation, enumeration, and search. 
 
         Args:
@@ -369,11 +383,11 @@ class SchreierContext:
                 break
 
         compare_result = 2
-        if self.best_perm_exist:
+        if self.best_perm_exist: # if a leaf node has been reached previously
             perm_candidate = list(chain.from_iterable(partition))
             compare_result = self._compare(perm_candidate, first_split)
 
-        if first_split == self.num_nodes - 1:
+        if first_split == self.num_nodes - 1: # if partition is discrete
             self.leaf_nodes += 1
             if not self.best_perm_exist:
                 self.best_perm_exist = True
@@ -400,24 +414,25 @@ class SchreierContext:
                     vertex = next(iter(candidates))
                     updated_partition[first_split] = {vertex}
                     updated_partition[first_split + 1] = remaining_in_block - {vertex}
-                    compact_partition = [x for x in updated_partition if x is not None]
+                    individualized_partition = [x for x in updated_partition if x is not None]
 
                     # update block indices
-                    for idx, block in enumerate(compact_partition):
+                    for idx, block in enumerate(individualized_partition):
                         for v in block:
                             self.vertex_block_index[v] = idx
 
-                    self._canon(compact_partition)
+                    self._canon(individualized_partition)
 
                     beta_prime = np.array([-1] * self.num_nodes, dtype=np.intp)
                     seen_vertices = set()
                     base_idx = -1
-                    for block in compact_partition:
+                    for block in individualized_partition:
                         base_idx += 1
                         rep = next(iter(block))
                         beta_prime[base_idx] = rep
                         seen_vertices.add(rep)
-                    for v in range(self.num_nodes):
+
+                    for v in self.graph.nodes():
                         if v not in seen_vertices:
                             base_idx += 1
                             beta_prime[base_idx] = v
@@ -464,14 +479,57 @@ def vertex_orbits(u_vector: list[list[NDArray[np.intp]]]) -> list[list[int]]:
                     visited.add(v_current)
                     q.append(v_current)
                     orb.append(int(v_current))
-        orbits.append(orb)
+        orbits.append(sorted(orb))
+    return orbits
+
+
+def edge_orbits(
+        edges: list[tuple[int, int]],
+        u_vector: list[list[NDArray[np.intp]]]
+) -> list[list[int]]:
+    """Calculate edge orbits using breadth-first search.
+
+    Args:
+        u_vector: coset representatives with respect to base beta, grouped 
+        by stabilizer index.
+
+    Returns:
+        A list of orbits, each orbit is a list of vertex indices.
+
+    Example:
+    >>> result = schreier_rep(G)
+    >>> orbits = edge_orbits(G.edges(), result.u_vector)
+    >>> # orbits might look like [[0,4], [1,2,3]] where each sublist is an orbit
+    """
+    visited = set()
+    orbits = []
+    num_nodes = len(u_vector[0][0])
+    generators = [g for u_vector_i in u_vector for g in u_vector_i]
+    generators.append(np.array(tuple(range(num_nodes))))
+
+    for e_start in edges:
+        e_start = tuple(sorted(e_start))
+        if e_start in visited:
+            continue
+        q = deque([e_start])
+        visited.add(e_start)
+        orb = [e_start]
+        while q:
+            e_start = q.popleft()
+            for g in generators:
+                e_current = tuple(sorted((int(g[e_start[0]]), int(g[e_start[1]]))))
+                if e_current not in visited:
+                    visited.add(e_current)
+                    q.append(e_current)
+                    orb.append(tuple(int(x) for x in e_current))
+        orbits.append(sorted(orb))
     return orbits
 
 
 def sample_automorphisms(
     u_vector: list[list[NDArray[np.intp]]],
-    num_samples: int,
-    rng: random.Random = None,
+    num_samples: int = 1,
+    seed: Optional[int] = None,
 ) -> list[NDArray[np.intp]]:
     """Uniformly sample automorphisms from the Sims-Schreier representation.
 
@@ -482,7 +540,10 @@ def sample_automorphisms(
     automorphisms are ignored.
 
     Args:
+        u_vector: coset representatives with respect to base beta, grouped 
+        by stabilizer index.
         num_samples: The number of automorphisms to return.
+        seed: Random seed for reproducibility.
         
     Returns:
         A list of uniformly sampled automorphisms in one-line notation.
@@ -493,7 +554,7 @@ def sample_automorphisms(
     >>> # automorphisms might look like [array([2, 0, 3, 1, 6, 7, 4, 5]), 
     >>> # array([5, 4, 6, 7, 0, 1, 3, 2])]
     """  
-    rng = np.random.default_rng(rng)
+    rng = np.random.default_rng(seed)
     num_nodes = len(u_vector[0][0])
     u_counts = [len(u_i) for u_i in u_vector]
     sampled_automorphisms = []
@@ -549,7 +610,7 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
 
 def schreier_rep(
         graph: nx.Graph,
-        num_samples: int = 3,
+        num_samples: Optional[int] = None,
         seed: int = 42
 ) -> "SchreierContext":
     """Compute Schreier representatives and orbits for a graph. 
@@ -568,16 +629,14 @@ def schreier_rep(
         seed: Random seed for reproducibility. Defaults to 42.
     """
     ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
-
     initial_partition = [set(graph.nodes())]
 
     ctx._canon(initial_partition)
-    print('leaf nodes reached: ', ctx.leaf_nodes)
-    print('total nodes reached: ', ctx.nodes_reached)
     ctx._change_base(ctx.identity)
 
     ctx.vertex_orbits = vertex_orbits(ctx.u_vector)
-    ctx.num_automorphisms = int(np.prod([len(u_i) + 1 for u_i in ctx.u_vector]))
+    ctx.edge_orbits = edge_orbits(graph.edges(), ctx.u_vector)
+    ctx.num_automorphisms = int(np.prod([len(u_i) + 1 for u_i in ctx.u_vector], dtype=object))
     return ctx
 
 
