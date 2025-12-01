@@ -22,35 +22,32 @@ import networkx as nx
 from numpy.typing import NDArray
 
 class SchreierContext:
-    """This object holds mutable states used throughout the automorphism calculation."""
+    """This object holds mutable states used throughout the automorphism calculation.
 
+    Args:
+        graph: A NetworkX Graph object representing the input graph.
+        num_samples: Number of samples to use for generating new coset representatives
+            from the existing set. If not provided, all coset representatives are used.
+        seed: Seed used for reproducibility. Defaults to 42.
+    """
     def __init__(self, graph: nx.Graph, num_samples: Optional[int] = None, seed: int = 42) -> None:
-        """
-        Initialize SchreierContext.
-
-        Args:
-            graph: A NetworkX Graph object representing the input graph.
-            num_samples: Number of randomly sampled automorphisms to return.
-            seed: Seed used for reproducibility. Defaults to 42.
-        """
+        if set(graph.nodes()) != set(range(len(graph.nodes()))):
+            graph = nx.convert_node_labels_to_integers(graph, ordering="default")
         self._nodes: list[int] = list(graph.nodes())
         self._num_nodes: int = graph.number_of_nodes()
         self._graph_edges: list[tuple[int, int]] = list(graph.edges())
-        self._num_samples: int = num_samples 
+        self._num_samples: Optional[int] = num_samples
         self._rng: random.Random = random.Random(seed)
         self._leaf_nodes: int = 0
         self._nodes_reached: int = 0
         self._u_map: dict[int, int] = {}
         self._u_len: int = 0
         self._u_vector: list = []
-        self._idx_to_node: dict[int, int] = {
-            idx: n for idx, n in enumerate(graph.nodes())
-        }
         self._neighbours: dict[int, set[int]] = {
-            self._idx_to_node[i]: set(graph.neighbors(self._idx_to_node[i]))
-            for i in range(self._num_nodes)
+            n: set(graph.neighbors(n))
+            for n in self._nodes
         }
-        self._identity: NDArray[np.intp] = np.array(range(self._num_nodes), dtype=np.intp)
+        self._identity: NDArray[np.intp] = np.arange(self._num_nodes, dtype=np.intp)
         self._vertex_block_index: dict[int, int] = {n: 0 for n in graph.nodes()}
 
         self._best_perm: NDArray[np.intp] = np.array(
@@ -58,25 +55,23 @@ class SchreierContext:
             dtype=np.intp
         )
         self._best_perm_exist: bool = False
-        self._beta: NDArray[np.intp] = np.array(
-            range(self._num_nodes),
-            dtype=np.intp)
-        
+        self._beta: NDArray[np.intp] = np.arange(self._num_nodes, dtype=np.intp)
+
     @property
     def leaf_nodes(self) -> int:
         """Number of leaf nodes encountered in the search tree."""
         return self._leaf_nodes
-    
+
     @property
     def nodes_reached(self) -> int:
         """Total number of nodes reached during traversal of the search tree."""
         return self._nodes_reached
-    
+
     @property
     def u_map(self) -> dict[int, int]:
         """Map from coset representative group index to stabilizer index."""
         return self._u_map
-    
+
     @property
     def u_vector(self) -> list:
         """Coset representatives grouped by stabilizer index."""
@@ -89,30 +84,26 @@ class SchreierContext:
             return int(np.prod([len(u_i) + 1 for u_i in self._u_vector], dtype=object))
         else:
             return 1
-        
+
     @property
     def vertex_orbits(self):
         """Vertex orbits induced by the coset representatives in u_vector."""
-        if self._u_vector:
-            return vertex_orbits(self._u_vector)
-        else:
-            return [[x] for x in self._nodes]
+        return vertex_orbits(self._u_vector, self._nodes)
 
     @property
     def edge_orbits(self):
         """Edge orbits induced by the coset representatives in u_vector."""
-        if self._u_vector:
-            return edge_orbits(self._graph_edges, self._u_vector)
-        else:
-            return [[x] for x in self._graph_edges]
-        
+        return edge_orbits(self._u_vector, self._graph_edges)
+
     def _sample_from_nested(self) -> list[NDArray[np.intp]]:
-        """Return a random sample of coset representatives."""
-
+        """Return a random sample of coset representatives.
+        
+        If num_samples is not specified, all coset representatives are returned.
+        """
         generators = [g for u_vector_i in self._u_vector for g in u_vector_i]
-        generators.append(np.array(range(self._num_nodes)))
+        generators.append(np.arange(self._num_nodes))
 
-        if len(generators) <= self._num_samples:
+        if not self._num_samples or len(generators) <= self._num_samples:
             return generators
         return self._rng.sample(generators, self._num_samples)
 
@@ -130,8 +121,8 @@ class SchreierContext:
 
         Returns:
             A tuple (i, g_reduced) where i is the index of the first base position
-            that could not be sifted. If g is completely sifted the returned index
-            equals self._num_nodes. g_reduced is the permutation obtained after
+            that could not be sifted. If ``g`` is completely sifted the returned index
+            equals ``self._num_nodes``. ``g_reduced`` is the permutation obtained after
             sifting through all positions up to (but not including) the returned
             index.
         """
@@ -144,14 +135,14 @@ class SchreierContext:
             next_diff += idx
             if next_diff not in self._u_map:
                 return next_diff, g
-            
+
             for h in self._u_vector[self._u_map[next_diff]]:
                 if h[beta[next_diff]] == g[beta[next_diff]]:
                     h_valid = h
                     break
             else:
                 return next_diff, g
-            
+
             g = mult(inv(self._num_nodes, h_valid), g)
             mask = (beta[next_diff:] != g[beta[next_diff:]])
             idx = mask.argmax()
@@ -174,7 +165,7 @@ class SchreierContext:
         In some cases the default value of ``ctx._num_samples = 3`` will not be
         sufficient to generate all automorphisms.
 
-        The automorphisms discovered by the Random-Schreier method result in pruning
+        The automorphisms discovered by the random-Schreier method result in pruning
         comparable to nauty, as measured by comparing the total number of search
         tree nodes visited for zephyr graphs of various sizes.
 
@@ -191,7 +182,7 @@ class SchreierContext:
         self._u_vector[self._u_map[i]].append(g)
 
         if self._num_samples is None:
-            # Attempt to compose new automorphisms from all transversals
+            # Attempt to compose new automorphisms from all coset representatives
             for u_i in self._u_vector:
                 for h in u_i:
                     f = mult(g, h)
@@ -213,7 +204,7 @@ class SchreierContext:
         Combinatorial algorithms: Generation, enumeration, and search.
 
         Existing coset representatives are tested in the new basis in addition to new
-        automorphisms composed from the Random-Schreier process. New automorphisms
+        automorphisms composed from the random-Schreier process. New automorphisms
         discovered during the change of base are essential for comprehensive pruning
         of the search tree.
 
@@ -283,12 +274,10 @@ class SchreierContext:
                         for count in range(len_partition - 1, block_index, -1):
                             partition[num_new_blocks - 1 + count] = partition[count]
                         new_blocks = []
-                        offset = 0
-                        for count_key in sorted(count_to_vertices):
+                        for offset, count_key in enumerate(sorted(count_to_vertices)):
                             partition[block_index + offset] = count_to_vertices[count_key]
                             remaining_vertices.update(count_to_vertices[count_key])
                             new_blocks.append(count_to_vertices[count_key])
-                            offset += 1
                         blocks_stack.extend(new_blocks[1:]) # Hopcroft's trick
 
                         for new_block_index in range(block_index, len(partition)):
@@ -413,12 +402,15 @@ class SchreierContext:
                         for g in self._u_vector[self._u_map[first_split]]:
                             candidates.discard(g[vertex])
 
-def vertex_orbits(u_vector: list[list[NDArray[np.intp]]]) -> list[list[int]]:
+def vertex_orbits(u_vector: list[list[NDArray[np.intp]]], nodes: list[int]) -> list[list[int]]:
     """Calculate vertex orbits using breadth-first search.
 
+    If ``u_vector`` contains no coset representatives, trivial orbits are returned.
+
     Args:
-        u_vector: coset representatives with respect to base beta, grouped
+        u_vector: Coset representatives with respect to base beta, grouped
             by stabilizer index.
+        nodes: List of vertex indices used to return trivial orbits when ``u_vector`` is empty.
 
     Returns:
         A list of orbits, each orbit is a list of vertex indices.
@@ -428,25 +420,37 @@ def vertex_orbits(u_vector: list[list[NDArray[np.intp]]]) -> list[list[int]]:
     >>> orbits = vertex_orbits(result._u_vector)
     >>> # orbits might look like [[0,2,3], [1,4]] where each sublist is an orbit
     """
+    if not u_vector:
+        return [[x] for x in nodes]
+
+    if not all(isinstance(sublist, list) for sublist in u_vector):
+        raise ValueError("u_vector must be a list of lists.")
+
+    if isinstance(nodes, np.ndarray):
+        nodes = nodes.tolist()
+
+    if not isinstance(nodes, list) or not all(isinstance(n, int) for n in nodes):
+        raise ValueError("nodes must be a list of integers.")
+
     visited = set()
     orbits = []
-    num_nodes = len(u_vector[0][0])
+    num_nodes = len(nodes)
     generators = [g for u_vector_i in u_vector for g in u_vector_i]
-    generators.append(np.array(tuple(range(num_nodes))))
+    generators.append(np.arange(num_nodes))
 
-    for v_start in range(num_nodes):
+    for v_start in nodes:
         if v_start in visited:
             continue
-        
+
         visited.add(v_start)
         orb = [v_start]
 
         q = deque([v_start])
         while q:
-            v_start = q.popleft()
-            
+            v_current = q.popleft()
+
             for g in generators:
-                v_current = g[v_start]
+                v_current = g[v_current]
                 if v_current not in visited:
                     visited.add(v_current)
                     q.append(v_current)
@@ -458,29 +462,39 @@ def vertex_orbits(u_vector: list[list[NDArray[np.intp]]]) -> list[list[int]]:
 
 
 def edge_orbits(
+        u_vector: list[list[NDArray[np.intp]]],
         edges: list[tuple[int, int]],
-        u_vector: list[list[NDArray[np.intp]]]
 ) -> list[list[int]]:
     """Calculate edge orbits using breadth-first search.
 
     Args:
-        u_vector: coset representatives with respect to base beta, grouped
+        u_vector: Coset representatives with respect to base beta, grouped
             by stabilizer index.
+        edges: List of graph edges as tuples of vertex index pairs.
 
     Returns:
-        A list of orbits, each orbit is a list of edges (tuples vertex index pairs).
+        A list of orbits, each orbit is a list of edges (tuples of vertex index pairs).
 
     Example:
     >>> result = schreier_rep(G)
     >>> orbits = edge_orbits(G.edges(), result._u_vector)
     >>> # orbits might look like [[(0, 1), (2, 3)], [(0, 2)]] where each sublist is an orbit
     """
+    if not u_vector:
+        return [[x] for x in edges]
+
+    if not all(isinstance(sublist, list) for sublist in u_vector):
+        raise ValueError("u_vector must be a list of lists.")
+
+    if not isinstance(edges, list) or not all(isinstance(e, tuple) for e in edges):
+        raise TypeError("edges must be a list of tuples")
+
     visited = set()
     orbits = []
     generators = [g for u_vector_i in u_vector for g in u_vector_i]
 
-    for u, v in edges:
-        e_start = (u, v) if u < v else (v, u)
+    for u_start, v_start in edges:
+        e_start = (u_start, v_start) if u_start < v_start else (v_start, u_start)
 
         if e_start in visited:
             continue
@@ -500,7 +514,7 @@ def edge_orbits(
                     orb.append(tuple(int(x) for x in e_current))
 
         orbits.append(sorted(orb))
-    
+
     return orbits
 
 
@@ -509,7 +523,7 @@ def sample_automorphisms(
     num_samples: int = 1,
     seed: Optional[int] = None,
 ) -> list[NDArray[np.intp]]:
-    """Uniformly sample automorphisms from the Sims-Schreier representation.
+    """Uniformly sample automorphisms from the Schreier-Sims representation.
 
     Randomly samples one coset representative from each non-trivial left
     transversal and takes the product, guaranteeing uniform sampling. The
@@ -518,10 +532,10 @@ def sample_automorphisms(
     automorphisms are ignored.
 
     Args:
-        u_vector: coset representatives with respect to base beta, grouped
+        u_vector: Coset representatives with respect to base beta, grouped
             by stabilizer index.
         num_samples: The number of automorphisms to return.
-            seed: Random seed for reproducibility.
+        seed: Random seed for reproducibility.
 
     Returns:
         A list of uniformly sampled automorphisms in one-line notation.
@@ -539,15 +553,15 @@ def sample_automorphisms(
 
     for _ in range(num_samples):
         sample_indices = rng.integers(low=-1, high=u_counts)
-        g_product = np.array(range(num_nodes))
-        
+        g_product = np.arange(num_nodes)
+
         for i in range(len(u_vector)):
             if sample_indices[i] >= 0:
                 g = u_vector[i][sample_indices[i]]
                 g_product = mult(g, g_product)
-        
+
         sampled_automorphisms.append(g_product)
-    
+
     return sampled_automorphisms
 
 
@@ -579,6 +593,7 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
 
     Returns:
         The inverse of alpha in one-line notation.
+
     Example:
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
         >>> inv(alpha)
@@ -603,14 +618,18 @@ def schreier_rep(
     the search tree.
 
     Args:
-        graph: A NetworkX Graph object representing the input graph.
-            Must provide a .nodes() iterable and standard NetworkX graph methods.
-        num_samples: Number of samples used to compose new automorphisms
-            according to the Random-Schreier method.
+        graph: A NetworkX Graph object representing the input graph containing
+        the following methods:
+            - ``nodes()``: iterable of all nodes
+            - ``number_of_nodes()``: total number of nodes
+            - ``edges()``: iterable of all edges
+            - ``neighbors()``: iterable of all neighbours for a given node
+        num_samples: Number of samples to use for generating new coset representatives
+            from the existing set. If not provided, all coset representatives are used.
         seed: Random seed for reproducibility. Defaults to 42.
     """
     ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
-    initial_partition = [set(graph.nodes())]
+    initial_partition = [set(ctx._nodes)]
 
     ctx._canon(initial_partition)
     ctx._change_base(ctx._identity)
@@ -618,7 +637,7 @@ def schreier_rep(
     return ctx
 
 
-def array_to_cycle(array: NDArray[np.intp]):
+def array_to_cycle(array: NDArray[np.intp]) -> str:
     """Convert an array in one-line notation to a string in cycle notation.
 
     Based on Algorithm 6.4 from Kreher, D. L., & Stinson, D. R. (1999).
@@ -632,24 +651,24 @@ def array_to_cycle(array: NDArray[np.intp]):
 
     Example:
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
-        >>> ArrayToCycle(alpha)
+        >>> array_to_cycle(alpha)
         '(0,2,1)'
     """
     unvisited = [True] * len(array)
-    cycle = ''
+    cycle_parts = []
 
     for i in range(len(array)):
         if unvisited[i]:
-            cycle += '('
-            cycle += str(i)
+            cycle_parts.append('(')
+            cycle_parts.append(str(i))
             unvisited[i] = False
             j = i
-            
+
             while unvisited[array[j]]:
-                cycle += ','
+                cycle_parts.append(',')
                 j = array[j]
-                cycle += str(j)
+                cycle_parts.append(str(j))
                 unvisited[j] = False
-            
-            cycle += ')'
-    return cycle
+
+            cycle_parts.append(')')
+    return ''.join(cycle_parts)
