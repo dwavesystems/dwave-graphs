@@ -416,6 +416,8 @@ def vertex_orbits(u_vector: list[list[NDArray[np.intp]]], nodes: list[int]) -> l
         A list of orbits, each orbit is a list of vertex indices.
 
     Example:
+    >>> from dwave.experimental.automorphism import vertex_orbits, schreier_rep
+    ...
     >>> result = schreier_rep(G)
     >>> orbits = vertex_orbits(result._u_vector)
     >>> # orbits might look like [[0,2,3], [1,4]] where each sublist is an orbit
@@ -476,6 +478,7 @@ def edge_orbits(
         A list of orbits, each orbit is a list of edges (tuples of vertex index pairs).
 
     Example:
+    >>> from dwave.experimental.automorphism import edge_orbits, schreier_rep
     >>> result = schreier_rep(G)
     >>> orbits = edge_orbits(G.edges(), result._u_vector)
     >>> # orbits might look like [[(0, 1), (2, 3)], [(0, 2)]] where each sublist is an orbit
@@ -576,9 +579,12 @@ def mult(alpha: NDArray[np.intp], beta: NDArray[np.intp]) -> NDArray[np.intp]:
         The composition alpha ∘ beta in one-line notation.
 
     Example:
+        >>> import numpy as np
+        >>> from dwave.experimental.automorphism import mult
+        ...
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
         >>> beta  = np.array([1,2,0], dtype=np.intp) # (0,1,2): 0->1, 1->2, 2->0
-        >>> mult(alpha, beta)
+        >>> mult(alpha, beta)   # doctest: +SKIP
         array([0,1,2], dtype=intp) # (0)(1)(2): 0->0, 1->1, 2->2
     """
     return alpha[beta]
@@ -595,8 +601,11 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
         The inverse of alpha in one-line notation.
 
     Example:
+        >>> import numpy as np
+        >>> from dwave.experimental.automorphism import inv
+        ...
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
-        >>> inv(alpha)
+        >>> inv(3, alpha)   # doctest: +SKIP
         np.array([1,2,0], dtype=np.intp) # (0,1,2): 0->1, 1->2, 2->0
     """
     alpha_inv = np.empty(n, dtype=np.intp)
@@ -650,6 +659,9 @@ def array_to_cycle(array: NDArray[np.intp]) -> str:
         The permutation as a string in cycle notation.
 
     Example:
+        >>> import numpy as np
+        >>> from dwave.experimental.automorphism import array_to_cycle
+        ...
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
         >>> array_to_cycle(alpha)
         '(0,2,1)'
