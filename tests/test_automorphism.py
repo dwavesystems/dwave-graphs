@@ -12,25 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 import random
+import unittest
 
-import numpy as np
-import networkx as nx
 import dwave_networkx as dnx
+import networkx as nx
+import numpy as np
 
 from dwave.experimental.automorphism import (
     schreier_rep,
     sample_automorphisms,
     vertex_orbits,
     edge_orbits,
+    array_to_cycle,
     SchreierContext
 )
 
 
 class Automorphisms(unittest.TestCase):
     def test_chimera_one(self):
-        """Check the number of automorphisms, vertex orbits, and edge orbits of a chimera-1 graph"""
+        """Check the number of automorphisms, vertex orbits, and edge orbits of a chimera-1 graph,
+        as well as the number of leaf nodes and total nodes in the search tree."""
 
         graph = dnx.chimera_graph(1)
         result = schreier_rep(graph)
@@ -42,6 +44,15 @@ class Automorphisms(unittest.TestCase):
             [[(0, 4), (0, 5), (0, 6), (0, 7), (1, 4), (1, 5),(1, 6), (1, 7),
               (2, 4), (2, 5), (2, 6), (2, 7), (3, 4), (3, 5), (3, 6), (3, 7)]]
         )
+        self.assertEqual(result.nodes_reached, 51)
+        self.assertEqual(result.leaf_nodes, 14)
+
+    def test_zepyr(self):
+        """Check the number of automorphisms of a zephyr-10 graph with no defects"""
+
+        graph = dnx.zephyr_graph(4)
+        result = schreier_rep(graph) # should run in ~ 0.7 s.
+        self.assertEqual(result.num_automorphisms, 55833176636675051023761408)
 
     def test_zephyr_defect(self):
         """Check the number of automorphisms of a zephyr graph with defects"""
@@ -83,14 +94,14 @@ class Automorphisms(unittest.TestCase):
             [(4, 32), (4, 33), (5, 32), (5, 33), (6, 34), (6, 35), (7, 34), (7, 35)],
             [(4, 34), (4, 35), (5, 34), (5, 35)],
             [(6, 7), (32, 33)],
+            [(6, 24), (6, 25), (7, 24), (7, 25), (14, 32), (14, 33), (15, 32), (15, 33)],
             [(6, 30), (6, 31), (7, 30), (7, 31), (8, 32), (8, 33), (9, 32), (9, 33)],
             [(6, 32), (6, 33), (7, 32), (7, 33)],
-            [(6, 24), (6, 25), (7, 24), (7, 25), (14, 32), (14, 33), (15, 32), (15, 33)],
             [(8, 9), (30, 31)],
-            [(8, 30), (8, 31), (9, 30), (9, 31)],
             [(8, 24), (8, 25), (9, 24), (9, 25), (14, 30), (14, 31), (15, 30), (15, 31)],
             [(8, 26), (8, 27), (9, 26), (9, 27), (12, 30), (12, 31), (13, 30), (13, 31)],
             [(8, 28), (8, 29), (9, 28), (9, 29), (10, 30), (10, 31), (11, 30), (11, 31)],
+            [(8, 30), (8, 31), (9, 30), (9, 31)],
             [(10, 11), (28, 29)],
             [(10, 20), (10, 21), (11, 20), (11, 21), (18, 28), (18, 29), (19, 28), (19, 29)],
             [(10, 22), (10, 23), (11, 22), (11, 23), (16, 28), (16, 29), (17, 28), (17, 29)],
@@ -115,15 +126,12 @@ class Automorphisms(unittest.TestCase):
         multiple_automorphisms = sample_automorphisms(result.u_vector, num_samples=3, seed=42)
 
         self.assertEqual(result.num_automorphisms, 16)
-        self.assertTrue(np.array_equal(
-            single_automorphism,
-            [np.array([6, 7, 0, 1, 2, 3, 4, 5])]
-        ))
+        self.assertTrue(np.array_equal(single_automorphism, [np.array([3, 4, 5, 6, 7, 0, 1, 2])]))
         self.assertTrue(np.array_equal(
             multiple_automorphisms,
-            [np.array([6, 7, 0, 1, 2, 3, 4, 5]),
-             np.array([3, 4, 5, 6, 7, 0, 1, 2]),
-             np.array([6, 7, 0, 1, 2, 3, 4, 5])]
+            [np.array([3, 4, 5, 6, 7, 0, 1, 2]),
+             np.array([6, 5, 4, 3, 2, 1, 0, 7]),
+             np.array([3, 4, 5, 6, 7, 0, 1, 2])]
         ))
 
     def test_kreher(self):
@@ -146,6 +154,27 @@ class Automorphisms(unittest.TestCase):
             [(0, 7), (2, 6), (4, 5)],
             [(5, 6), (5, 7), (6, 7)]]
         )
+        expected_cert = (
+            b'\xae\x0c(tF\x91\xbf\xbc\x9c\x80\xa0N\xc0&:J'
+            b'A\xc7\xfc\xec\x91\x1cv\xef\xf1VkA\x12\xd3\x1f\x9e'
+        )
+        self.assertEqual(result_kreher._certificate(), expected_cert)
+
+    def test_kreher_two_disjoint(self):
+        """Check the number of automorphisms for the disjoint union of two graphs from
+        Example 7.6 in Kreher, D. L., & Stinson, D. R. (1999). Combinatorial algorithms: 
+        Generation, enumeration, and search."""
+
+        nodes_kreher = [0, 1, 2, 3, 4, 5, 6, 7]
+        edges_kreher = [
+            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
+            (6, 7), (7, 0), (0, 3), (1, 4), (2, 6), (5, 7)]
+        graph_kreher = nx.Graph()
+        graph_kreher.add_nodes_from(nodes_kreher)
+        graph_kreher.add_edges_from(edges_kreher)
+        graph_two = nx.disjoint_union_all([graph_kreher] * 2)
+        result_kreher = schreier_rep(graph_two)
+        self.assertEqual(result_kreher.num_automorphisms, 288)
 
     def test_null_zero(self):
         """Check the number of automorphisms, vertex orbits, and edge orbits of a
@@ -267,16 +296,320 @@ class Automorphisms(unittest.TestCase):
 
         graph = nx.Graph()
         ctx = SchreierContext(graph)
-        assert ctx._nodes == []
-        assert ctx._num_nodes == 0
-        assert ctx._graph_edges == []
+        self.assertEqual(ctx._nodes, [])
+        self.assertEqual(ctx._num_nodes, 0)
+        self.assertEqual(ctx._graph_edges, [])
 
     def test_schreier_null_two(self):
         """Test the initialization of SchreierContext on a null (edgeless) graph with two nodes."""
 
         graph = nx.Graph([(0,1)])
         ctx = SchreierContext(graph)
-        assert ctx._nodes == [0,1]
-        assert ctx._graph_edges == [(0,1)]
-        assert ctx._neighbours[0] == {1}
-        assert ctx._neighbours[1] == {0}
+        self.assertEqual(ctx._nodes, [0,1])
+        self.assertEqual(ctx._graph_edges, [(0,1)])
+        self.assertEqual(ctx._neighbours[0], {1})
+        self.assertEqual(ctx._neighbours[1], {0})
+
+    def test_large_disjoint(self):
+        """Test the number of automorphisms and number of vertex orbits of a graph with three
+        different types of components."""
+
+        subgraph1 = nx.grid_graph(dim=[4, 4, 4])
+        subgraph2 = nx.grid_graph(dim=[2, 2])
+        subgraph3 = nx.grid_graph(dim=[3, 1, 1])
+        graph = nx.disjoint_union_all([subgraph1] * 10 + [subgraph2] * 10 + [subgraph3] * 10)
+        result = schreier_rep(graph) # should take ~ 0.6 s
+        expected_autos = 3411153783464329169385697981743942365872128000000 # verified w/ pynauty
+        self.assertEqual(result.num_automorphisms, expected_autos)
+        expected_num_vertex_orbits = 7
+        self.assertEqual(len(result.vertex_orbits), expected_num_vertex_orbits)
+
+    def test_large_disjoint_cubes(self):
+        """Test the number of automorphisms and number of vertex orbits of a graph consisting of
+        the disjoint union of cubic graphs with open boundary conditions."""
+
+        num_cubes = 20
+        cube_graph = nx.grid_graph(dim=[4, 4, 4])
+        graph = nx.disjoint_union_all([cube_graph] * num_cubes)
+        result = schreier_rep(graph) # should take ~ 0.5 s
+        expected_autos = 10255323495904670812809564908341430841095372144640000 # verified w/ pynauty
+        self.assertEqual(result.num_automorphisms, expected_autos)
+        expected_num_vertex_orbits = 4
+
+        self.assertEqual(len(result.vertex_orbits), expected_num_vertex_orbits)
+
+
+    def test_nauty(self):
+        """Check the number of automorphisms, vertex orbits, and edge orbits of the graph from
+        the example from McKay & Piperno (2014), "Practical Graph Isomorphism II"."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([
+            (0, 1), (0, 3),
+            (1, 2), (1, 4), (1, 3), (1, 5),
+            (2, 5),
+            (3, 4), (3, 6), (3, 7),
+            (4, 5), (4, 7),
+            (5, 7), (5, 8),
+            (6, 7),
+            (7, 8),
+        ])
+        result = schreier_rep(graph)
+
+        self.assertEqual(result.num_automorphisms, 8)
+        self.assertEqual(result.vertex_orbits, [[0, 2, 6, 8], [1, 3, 5, 7], [4]])
+        expected_edge_orbits = [[(0, 1), (0, 3), (1, 2), (2, 5), (3, 6), (5, 8), (6, 7), (7, 8)],
+                                [(1, 3), (1, 5), (3, 7), (5, 7)],
+                                [(1, 4), (3, 4), (4, 5), (4, 7)]]
+        self.assertEqual(result.edge_orbits, expected_edge_orbits)
+        expected_cert = (
+            b'\nZ\xdf\x8e\x88\xa8\x10\xc2o\xa2\x94~\xb5\xfce12'
+            b'\xf2\xd6\x9b@\xdd\xc4\x93\x03\xcc\xc2\xb8\x16\x03\x18['
+        )
+        self.assertEqual(result._certificate(), expected_cert)
+
+    def test_array_to_cycle(self):
+        """Test the functionality of the ``array_to_cycle()`` function, including the optional
+        labelling map."""
+
+        g = np.array([0, 3, 6, 1, 4, 7, 2, 5, 8])
+        self.assertEqual(array_to_cycle(g), '(0)(1,3)(2,6)(4)(5,7)(8)')
+
+        index_to_node = {0: 7, 1: 3, 2: 22, 3: 4, 4: 15, 5: 11, 6: 99, 7: 'b', 8: 44}
+        self.assertEqual(array_to_cycle(g, index_to_node), '(7)(3,4)(22,99)(15)(11,b)(44)')
+
+    def test_array_to_cycle_missing_keys(self):
+        """Test when the optional labelling map for ``array_to_cycle()`` is missing a key."""
+
+        g = np.array([0, 3, 6, 1, 4, 7, 2, 5, 8])
+        index_to_node = {0: 7, 1: 3, 2: 22, 3: 4, 4: 15, 5: 11, 6: 99, 7: 'b'}
+        with self.assertRaises(ValueError):
+            array_to_cycle(g, index_to_node)
+
+    def test_string_labels(self):
+        """Test the orbits returned from a graph with nodes labelled by strings."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([ ('a', 'b'), ('b', 'c'), ('c', 'd'), ('d', 'e'), ])
+        result = schreier_rep(graph)
+
+        vertex_orbs = result.vertex_orbits
+        self.assertEqual(vertex_orbs, [[0, 4], [1, 3], [2]])
+        vertex_orbits_orig = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbits_orig, [['a', 'e'], ['b', 'd'], ['c']])
+
+        edge_orbs = result.edge_orbits
+        self.assertEqual(edge_orbs, [[(0, 1), (3, 4)], [(1, 2), (2, 3)]])
+
+        edge_orbits_orig = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbits_orig, [[('a', 'b'), ('d', 'e')], [('b', 'c'), ('c', 'd')]])
+
+    def test_disjoint_paths_ordered(self):
+        """
+        Test the automorphisms and orbits of a graph with the following labels::
+
+            (0) -- (1) -- (2)    (3) -- (4) -- (5)
+        """
+
+        graph = nx.Graph()
+        graph.add_edges_from([(0, 1), (1, 2), (3, 4), (4, 5)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 8)
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbs, [[0, 2, 3, 5], [1, 4]])
+
+        edge_orbs = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbs, [[(0, 1), (1, 2), (3, 4), (4, 5)]])
+
+    def test_disjoint_paths_one_disordered(self):
+        """
+        Test the automorphisms and orbits of a graph with the following labels::
+
+            (0) -- (1) -- (2)    (3) -- (5) -- (4)
+        """
+
+        graph = nx.Graph()
+        graph.add_edges_from([(0, 1), (1, 2), (3, 5), (4, 5)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 8)
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbs, [[0, 2, 3, 4], [1, 5]])
+
+        edge_orbs = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbs, [[(0, 1), (1, 2), (3, 5), (4, 5)]])
+
+    def test_disjoint_paths_both_disordered(self):
+        """
+        Test the automorphisms and orbits of a graph with the following labels::
+
+            (1) -- (0) -- (2)    (3) -- (5) -- (4)
+        """
+
+        graph = nx.Graph()
+        graph.add_edges_from([(0, 2), (1, 0), (3, 5), (5, 4)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 8)
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbs, [[0, 5], [1, 2, 3, 4]])
+
+        edge_orbs = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbs, [[(0, 1), (0, 2), (3, 5), (4, 5)]])
+
+    def test_disjoint_paths_contiguous_with_gap(self):
+        """
+        Test the automorphisms and orbits of a graph with the following labels::
+
+            (0) -- (2) -- (1)    (5) -- (7) -- (6)
+        """
+
+        graph = nx.Graph()
+        graph.add_edges_from([(0, 2), (1, 2), (6, 7), (5, 7)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 8)
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbs, [[0, 1, 5, 6], [2, 7]])
+
+        edge_orbs = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbs, [[(0, 2), (1, 2), (5, 7), (6, 7)]])
+
+    def test_disjoint_paths_discontiguous_swapped(self):
+        """
+        Test the automorphisms and orbits of a graph with the following labels::
+
+            (2) -- (0) -- (3)    (4) -- (1) -- (5)
+        """
+
+        graph = nx.Graph()
+        graph.add_edges_from([(0, 2), (0, 3), (1, 4), (1, 5)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 8)
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbs, [[0, 1], [2, 3, 4, 5]])
+
+        edge_orbs = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbs, [[(0, 2), (0, 3), (1, 4), (1, 5)]])
+
+    def test_disjoint_paths_discontiguous_swapped_gap(self):
+        """
+        Test the automorphisms and orbits of a graph with the following labels::
+
+            (5) -- (1) -- (7)    (0) -- (4) -- (9)
+        """
+
+        graph = nx.Graph()
+        graph.add_edges_from([(5, 1), (1, 7), (9, 4), (4, 0)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 8)
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(vertex_orbs, [[0, 5, 7, 9], [1, 4]])
+
+        edge_orbs = result.edge_orbits_original_labels
+        self.assertEqual(edge_orbs, [[(0, 4), (1, 5), (1, 7), (4, 9)]])
+
+    def test_node_mappings_components(self):
+        """Test the ``index_to_node`` and ``node_to_index`` properties for a graph
+        with two components."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([(5, 1), (1, 7), (9, 4), (4, 0)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.index_to_node, {0: 1, 1: 5, 2: 7, 3: 0, 4: 4, 5: 9})
+        self.assertEqual(result.node_to_index, {1: 0, 5: 1, 7: 2, 0: 3, 4: 4, 9: 5})
+
+    def test_node_mappings_components_strings(self):
+        """Test the ``index_to_node`` and ``node_to_index`` properties for a graph
+        with two components. labelled by strings."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([ ('a', 'b'), ('b', 'c'), ('c', 'd'), ('d', 'e'), ])
+        result = schreier_rep(graph)
+        self.assertEqual(result.index_to_node, {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e'})
+        self.assertEqual(result.node_to_index, {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4})
+
+    def test_node_mappings_nauty(self):
+        """Test the ``index_to_node`` and ``node_to_index`` properties for a graph
+        with node labels equal to its node indices."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([
+            (0, 1), (0, 3),
+            (1, 2), (1, 4), (1, 3), (1, 5),
+            (2, 5),
+            (3, 4), (3, 6), (3, 7),
+            (4, 5), (4, 7),
+            (5, 7), (5, 8),
+            (6, 7),
+            (7, 8),
+        ])
+        result = schreier_rep(graph)
+
+        expected_index_to_node = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8}
+        self.assertEqual(result.node_to_index, expected_index_to_node)
+        expected_node_to_index =  {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8}
+        self.assertEqual(result.index_to_node, expected_node_to_index)
+
+    def test_node_mappings_nauty_shifted(self):
+        """Test the ``index_to_node`` and ``node_to_index`` properties for a graph
+        with node labels equal to a fixed shift from its node indices."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([
+            (3, 4), (3, 6),
+            (4, 5), (4, 7), (4, 6), (4, 8),
+            (5, 8),
+            (6, 7), (6, 9), (6, 10),
+            (7, 8), (7, 10),
+            (8, 10), (8, 11),
+            (9, 10),
+            (10, 11),
+        ])
+        result = schreier_rep(graph)
+
+        expected_index_to_node = {0: 3, 1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10, 8: 11}
+        self.assertEqual(result.index_to_node, expected_index_to_node)
+        expected_node_to_index =  {3: 0, 4: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8}
+        self.assertEqual(result.node_to_index, expected_node_to_index)
+
+    def test_u_map(self):
+        """Test the ``u_map`` property."""
+
+        graph = nx.Graph()
+        graph.add_edges_from([(5, 1), (1, 7), (9, 4), (4, 0)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.u_map, {np.int64(1): 0, np.int64(3): 1, np.int64(0): 2})
+
+    def test_nodes_reached_components(self):
+        """Test the ``leaf_nodes`` and ``nodes_reached`` properties on a graph with multiple
+        components."""
+
+        num_cubes = 10
+        cube_graph = nx.grid_graph(dim=[3, 3, 3])
+        graph = nx.disjoint_union_all([cube_graph] * num_cubes)
+        result = schreier_rep(graph)
+        expected_autos = 235600065379488183091200
+        self.assertEqual(result.num_automorphisms, expected_autos)
+
+        expected_leaf_nodes = 130
+        expected_nodes_reached = 260
+        self.assertEqual(result.leaf_nodes, expected_leaf_nodes)
+        self.assertEqual(result.nodes_reached, expected_nodes_reached)
+
+    def test_color_dtype_large(self):
+        """Test that ``_color_dtype`` is set correctly for graphs with more than 65535 nodes."""
+
+        small_graph = nx.empty_graph(65535)
+        ctx = SchreierContext(small_graph)
+        self.assertEqual(ctx._color_dtype, np.uint16)
+
+        big_graph = nx.empty_graph(65536)
+        ctx = SchreierContext(big_graph)
+        self.assertEqual(ctx._color_dtype, np.uint32)
+
+if __name__ == "__main__":
+    unittest.main()

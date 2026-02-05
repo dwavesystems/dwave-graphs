@@ -12,14 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import defaultdict, deque
-import random
+from collections import deque
+from collections.abc import Hashable
+from dataclasses import dataclass
+from enum import Enum, auto
+import hashlib
 from itertools import chain
-from typing import Optional
+import random
+from typing import Mapping
 
-import numpy as np
 import networkx as nx
+import numpy as np
 from numpy.typing import NDArray
+
+@dataclass
+class ComponentInfo:
+    """Container for per-component data used during automorphism discovery on disjoint graphs."""
+    u_vector: list
+    nodes: NDArray
+    best_perm: NDArray
+
+class EnterMode(Enum):
+    """Controls when the ``_enter()`` function attempts to compose new automorphisms."""
+    RECURSE = auto()
+    RECURSE_ONCE = auto()
+    NO_RECURSE = auto()
 
 class SchreierContext:
     """This object holds mutable states used throughout the automorphism calculation.
@@ -30,32 +47,53 @@ class SchreierContext:
             from the existing set. If not provided, all coset representatives are used.
         seed: Seed used for reproducibility. Defaults to 42.
     """
-    def __init__(self, graph: nx.Graph, num_samples: Optional[int] = None, seed: int = 42) -> None:
-        if set(graph.nodes()) != set(range(len(graph.nodes()))):
-            graph = nx.convert_node_labels_to_integers(graph, ordering="default")
+    def __init__(self, graph: nx.Graph, num_samples: int | None = None, seed: int = 42) -> None:
+        original_nodes_sorted = sorted(graph.nodes())
+        self._index_to_node: dict[int, Hashable] = {
+            new: old for new, old in enumerate(original_nodes_sorted)
+        }
+        self._node_to_index: dict[Hashable, int] = {
+            old: new for new, old in enumerate(original_nodes_sorted)
+        }
+        graph = nx.relabel_nodes(graph, self._node_to_index)  # relabel nodes contiguously (0...n-1)
+
         self._nodes: list[int] = list(graph.nodes())
         self._num_nodes: int = graph.number_of_nodes()
         self._graph_edges: list[tuple[int, int]] = list(graph.edges())
-        self._num_samples: Optional[int] = num_samples
+        self._neighbours: list[set[int]] = [set(graph.neighbors(i)) for i in range(self._num_nodes)]
+        self._graph: nx.Graph = graph
+
+        self._num_samples: int | None = num_samples
         self._rng: random.Random = random.Random(seed)
+
         self._leaf_nodes: int = 0
         self._nodes_reached: int = 0
-        self._u_map: dict[int, int] = {}
+        self._depth: int = 0
+
+        self._u_map: dict[np.intp, int] = {}
         self._u_len: int = 0
         self._u_vector: list = []
-        self._neighbours: dict[int, set[int]] = {
-            n: set(graph.neighbors(n))
-            for n in self._nodes
-        }
-        self._identity: NDArray[np.intp] = np.arange(self._num_nodes, dtype=np.intp)
-        self._vertex_block_index: dict[int, int] = {n: 0 for n in graph.nodes()}
+        self._u_vector_inv: list[list[NDArray[np.intp]]] = []
 
-        self._best_perm: NDArray[np.intp] = np.array(
-            range(self._num_nodes),
-            dtype=np.intp
-        )
+        self._identity: NDArray[np.intp] = np.arange(self._num_nodes, dtype=np.intp)
+
+        self._best_perm: NDArray = np.arange(self._num_nodes)
         self._best_perm_exist: bool = False
-        self._beta: NDArray[np.intp] = np.arange(self._num_nodes, dtype=np.intp)
+        self._compare_adj: bool = False
+        self._trace_history: list = []
+
+        self._in_colors_adj: bytearray = bytearray(self._num_nodes)
+        self._in_refine_stack: bytearray = bytearray(self._num_nodes)
+
+        self._color_degree: list[int] = [0] * self._num_nodes
+        self._min_color_degree: list[int] = [0] * self._num_nodes
+        self._max_color_degree: list[int] = [0] * self._num_nodes
+        self._active_vertices: list[list[int]] = [[] for _ in range(self._num_nodes)]
+
+        if self._num_nodes <= 65535:
+            self._color_dtype: np.dtype = np.uint16
+        else:
+            self._color_dtype: np.dtype = np.uint32
 
     @property
     def leaf_nodes(self) -> int:
@@ -68,12 +106,24 @@ class SchreierContext:
         return self._nodes_reached
 
     @property
-    def u_map(self) -> dict[int, int]:
+    def index_to_node(self) -> dict[int, Hashable]:
+        """The mapping from the basis of relabelled nodes (0...n-1) to the original
+        node labels."""
+        return self._index_to_node
+
+    @property
+    def node_to_index(self) -> dict[Hashable, int]:
+        """The mapping from the original node labels to the basis of relabelled
+        nodes (0...n-1)."""
+        return self._node_to_index
+
+    @property
+    def u_map(self) -> dict[np.intp, int]:
         """Map from coset representative group index to stabilizer index."""
         return self._u_map
 
     @property
-    def u_vector(self) -> list:
+    def u_vector(self) -> list[list[NDArray[np.intp]]]:
         """Coset representatives grouped by stabilizer index."""
         return self._u_vector
 
@@ -86,26 +136,28 @@ class SchreierContext:
             return 1
 
     @property
-    def vertex_orbits(self):
-        """Vertex orbits induced by the coset representatives in u_vector."""
+    def vertex_orbits(self) -> list[list[int]]:
+        """Vertex orbits induced by the coset representatives in u_vector and returned
+        in the basis of relabelled nodes (0...n-1)."""
         return vertex_orbits(self._u_vector, self._nodes)
 
     @property
-    def edge_orbits(self):
-        """Edge orbits induced by the coset representatives in u_vector."""
+    def vertex_orbits_original_labels(self) -> list[list[Hashable]]:
+        """Vertex orbits induced by the coset representatives in u_vector and returned
+        with the original node labels."""
+        return vertex_orbits(self._u_vector, self._nodes, index_to_node=self._index_to_node)
+
+    @property
+    def edge_orbits(self) -> list[list[int]]:
+        """Edge orbits induced by the coset representatives in u_vector and returned
+        in the basis of relabelled nodes (0...n-1)."""
         return edge_orbits(self._u_vector, self._graph_edges)
 
-    def _sample_from_nested(self) -> list[NDArray[np.intp]]:
-        """Return a random sample of coset representatives.
-        
-        If num_samples is not specified, all coset representatives are returned.
-        """
-        generators = [g for u_vector_i in self._u_vector for g in u_vector_i]
-        generators.append(np.arange(self._num_nodes))
-
-        if not self._num_samples or len(generators) <= self._num_samples:
-            return generators
-        return self._rng.sample(generators, self._num_samples)
+    @property
+    def edge_orbits_original_labels(self) -> list[list[Hashable]]:
+        """Edge orbits induced by the coset representatives in u_vector and returned
+        with the original node labels."""
+        return edge_orbits(self._u_vector, self._graph_edges, index_to_node=self._index_to_node)
 
     def _test_composability(self, g: NDArray[np.intp]) -> tuple[int, NDArray[np.intp]]:
         """Test if an automorphism is composable from coset representatives.
@@ -126,163 +178,434 @@ class SchreierContext:
             sifting through all positions up to (but not including) the returned
             index.
         """
-        beta = self._beta
-        mask = (beta != g[beta])
-        idx = mask.argmax()
+        mask = (g != self._identity)
+        index = mask.argmax()
         next_diff = 0
 
-        while mask[idx]:
-            next_diff += idx
+        while mask[index]:
+            next_diff += index
             if next_diff not in self._u_map:
                 return next_diff, g
 
-            for h in self._u_vector[self._u_map[next_diff]]:
-                if h[beta[next_diff]] == g[beta[next_diff]]:
-                    h_valid = h
+            for i, h in enumerate(self._u_vector[self._u_map[next_diff]]):
+                if h[next_diff] == g[next_diff]:
                     break
             else:
                 return next_diff, g
 
-            g = mult(inv(self._num_nodes, h_valid), g)
-            mask = (beta[next_diff:] != g[beta[next_diff:]])
-            idx = mask.argmax()
+            g = self._u_vector_inv[self._u_map[next_diff]][i][g]
+            mask = (g[next_diff:] != self._identity[next_diff:])
+            index = mask.argmax()
+
         return self._num_nodes, g
 
-    def _enter(self, g: NDArray[np.intp]) -> None:
+    def _enter(self, g: NDArray[np.intp], mode: EnterMode = EnterMode.RECURSE) -> None:
         """Add automorphism if it can't be composed from coset representatives.
 
         Based on Algorithm 6.11 from Kreher, D. L., & Stinson, D. R. (1999).
         Combinatorial algorithms: Generation, enumeration, and search.
 
-        Skips entering identity permutations. If an automorphism can't be composed
-        from existing coset representatives it is added to u_vector.
+        If an automorphism can't be composed from existing coset representatives
+        it is added as a new coset representative to u_vector. Depending on the 
+        setting of ``mode``, ``_enter()`` is called recursively to attempt to
+        compose additional coset representatives from the composition between
+        the newly-discovered coset representative and existing coset representatives.
 
-        Uses random-Schreier method (see Permutation Group Algorithms, Ákos Seress,
-        Cambridge University Press, 2003) to attempt to compose new automorphisms
-        only from a subset of randomly sampled coset representatives instead of
-        the full list of coset representatives.
-
-        In some cases the default value of ``ctx._num_samples = 3`` will not be
-        sufficient to generate all automorphisms.
-
-        The automorphisms discovered by the random-Schreier method result in pruning
-        comparable to nauty, as measured by comparing the total number of search
-        tree nodes visited for zephyr graphs of various sizes.
+        The automorphisms discovered will result in pruning comparable to nauty,
+        as measured by comparing the total number of search tree nodes visited
+        for zephyr graphs of various sizes.
 
         Args:
             g: A permutation represented as a list of integers in one-line notation.
+            mode: Specifies if recursive calls to ``enter()`` are performed to attempt
+                to compose new automorphisms. The setting ``EnterMode.RECURSE_ONCE``
+                results in a single call to ``enter()`` per coset representative where
+                no further attempts to compose automorphisms occur. 
         """
         i, g = self._test_composability(g)
         if i == self._num_nodes:
             return
+
         if i not in self._u_map:
             self._u_map[i] = self._u_len
             self._u_len += 1
             self._u_vector.append([])
+            self._u_vector_inv.append([])
+
         self._u_vector[self._u_map[i]].append(g)
+        self._u_vector_inv[self._u_map[i]].append(inv(self._num_nodes, g))
 
-        if self._num_samples is None:
-            # Attempt to compose new automorphisms from all coset representatives
-            for u_i in self._u_vector:
-                for h in u_i:
-                    f = mult(g, h)
-                    if (f == self._identity).all():
-                        continue
-                    self._enter(f)
-        else:
-            # Attempt to compose new automorphisms from random samples
-            for h in self._sample_from_nested():
+        if mode is EnterMode.NO_RECURSE:
+            return
+
+        for u_i in self._u_vector:
+            for h in u_i:
                 f = mult(g, h)
-                if (f == self._identity).all():
-                    continue
-                self._enter(f)
+                if mode is EnterMode.RECURSE_ONCE:
+                    self._enter(f, mode=EnterMode.NO_RECURSE)
+                else:
+                    self._enter(f)
 
-    def _change_base(self, beta_prime: NDArray[np.intp]) -> None:
-        """Convert the set of coset representatives to a new base.
+    def _refine(
+        self,
+        partition: list[set[int]],
+        trace: NDArray[np.integer],
+        color: NDArray[np.integer],
+        num_colors: int,
+        individualized_vertex: int | None = None,
+    ) -> None:
+        """Perform color refinement on the current partition until an equitable
+        coloring is reached.
 
-        Based on Algorithm 6.12 from Kreher, D. L., & Stinson, D. R. (1999).
-        Combinatorial algorithms: Generation, enumeration, and search.
+        This procedure implements the 1-dimensional Weisfeiler-Leman (WL) refinement,
+        following Algorithms 2 and 3 of Berkholz (2016), *Tight lower and upper bounds
+        for the complexity of canonical color refinement*.
 
-        Existing coset representatives are tested in the new basis in addition to new
-        automorphisms composed from the random-Schreier process. New automorphisms
-        discovered during the change of base are essential for comprehensive pruning
-        of the search tree.
+        A refinement stack is initialized with either:
+            • all color classes (if no vertex has been individualized), or
+            • the color class of the individualized vertex.
 
-        Args:
-            beta_prime: The new base, represented by a permutation in one-line
-                notation.
-        """
-        u_vector_old = self._u_vector
-        self._beta = beta_prime
-        self._u_vector = []
-        self._u_map = {}
-        self._u_len = 0
+        For each color class popped from the stack, the algorithm computes the
+        color-degree of every vertex: the number of neighbours it has in the refining
+        color class. These color-degrees determine how each color class should be
+        split. If a color class contains vertices with differing color-degrees, it is
+        partitioned into new color classes, and the smaller subcells are pushed onto
+        the refinement stack.
 
-        for j in range(len(u_vector_old)):
-            for g in u_vector_old[j]:
-                self._enter(g)
+        The process continues until no color class can be further refined, yielding an
+        equitable coloring.
 
-    def _refine(self, partition: list[set[int]]) -> None:
-        """Perform colour refinement on partition until equitable colouring is reached.
+        If a vertex was individualized prior to this refinement step, only the
+        color class containing that vertex needs to be placed on the refinement
+        stack initially, since only colors adjacent to that color can be affected.
 
-        Based on Algorithm 7.5 from Kreher, D. L., & Stinson,
-        D. R. (1999). Combinatorial algorithms: Generation, enumeration, and search.
-        and Algorithms 1 and 2 from Berkholz, C. (2016). Tight lower and upper
-        bounds for the complexity of canonical colour refinement.
-
-        A stack is initialized to contain each block in the initial partition.
-        An invariant h equal to the length of the intersection of the neighbourhood
-        of a node with blocks popped from the stack is used to iteratively refine
-        the initial partition. If a block successfully refines the partition, the
-        new sub-blocks are added to the stack. Hopcroft's trick enables us to discard
-        one of these blocks — a more intentional way of determining which block to
-        discard may yield better performance.
-
-        Keeping track of the neighbourhood of each block popped from the stack
-        enables the refinement algorithm to be O(m log(n)) as opposed to O(n**2 log(n)),
-        where m and n are edges and vertices, respectively, which significantly
-        improves the algorithm for sparse graphs.
+        For performance reasons, ``num_colors`` is passed as a single-element list
+        so that updates to the number of colors persist across calls without having
+        to return anything.
 
         Args:
-            partition: Partition represented as a list of vertex index sets.
+            partition: The current partition structure, represented as a list of sets of vertices 
+                ordered by color.
+            trace: A list of the sizes of each partition cell (color class), ordered by color.
+            color: An array mapping each vertex to its current color.
+            num_colors: The current number of colors in the partition.
+            individualized_vertex: The vertex individualized prior to this refinement step, if any.
+
+        Returns:
+            The new number of colors, the updated trace array, and the updated color array.
         """
         neighbours = self._neighbours
-        vertex_block_index = self._vertex_block_index
+        color_degree = self._color_degree
+        min_color_degree = self._min_color_degree
+        max_color_degree = self._max_color_degree
+        active_vertices = self._active_vertices
+        in_refine_stack = self._in_refine_stack
+        in_colors_adj = self._in_colors_adj
 
-        remaining_vertices = set(self._nodes)
-        blocks_stack = deque(partition)
-        while blocks_stack:
-            current_block = blocks_stack.pop()
-            if current_block <= remaining_vertices:
-                remaining_vertices -= current_block
-                touched_blocks = set()
-                for v in current_block:
-                    for w in neighbours[v]:
-                        touched_blocks.add(vertex_block_index[w])
-                vertex_block_index = self._vertex_block_index
+        colors_adj = []
 
-                for block_index in sorted(touched_blocks, reverse=True):
-                    count_to_vertices = defaultdict(set)
-                    for u in partition[block_index]:
-                        count = len(current_block & neighbours[u])
-                        count_to_vertices[count].add(u)
-                    num_new_blocks = len(count_to_vertices)
-                    if num_new_blocks > 1:
-                        len_partition = len(partition)
-                        for _ in range(num_new_blocks - 1):
-                            partition.append(set())
-                        for count in range(len_partition - 1, block_index, -1):
-                            partition[num_new_blocks - 1 + count] = partition[count]
-                        new_blocks = []
-                        for offset, count_key in enumerate(sorted(count_to_vertices)):
-                            partition[block_index + offset] = count_to_vertices[count_key]
-                            remaining_vertices.update(count_to_vertices[count_key])
-                            new_blocks.append(count_to_vertices[count_key])
-                        blocks_stack.extend(new_blocks[1:]) # Hopcroft's trick
+        if individualized_vertex is None:
+            refine_stack = list(range(num_colors))
+        else:
+            refine_stack = [color[individualized_vertex]]
+        num_colors = [num_colors] # mutable container so ``_split_up_color()`` can increment it
 
-                        for new_block_index in range(block_index, len(partition)):
-                            for v in partition[new_block_index]:
-                                vertex_block_index[v] = new_block_index
+        for v in refine_stack:
+            in_refine_stack[v] = 1
+
+        while refine_stack:
+            refinement_color = refine_stack.pop()
+            in_refine_stack[refinement_color] = 0
+
+            for v in partition[refinement_color]:
+                for w in neighbours[v]:
+                    color_degree[w] += 1
+                    cw = color[w]
+                    if color_degree[w] == 1:
+                        active_vertices[cw].append(w)
+                    if in_colors_adj[cw] == 0:
+                        colors_adj.append(cw)
+                        in_colors_adj[cw] = 1
+                    if color_degree[w] > max_color_degree[cw]:
+                        max_color_degree[cw] = color_degree[w]
+
+            for c in colors_adj:
+                if trace[c] != len(active_vertices[c]):
+                    min_color_degree[c] = 0
+                else:
+                    min_color_degree[c] = max_color_degree[c]
+                    for v in active_vertices[c]:
+                        if color_degree[v] < min_color_degree[c]:
+                            min_color_degree[c] = color_degree[v]
+
+            colors_to_split = []
+            for c in colors_adj:
+                if min_color_degree[c] < max_color_degree[c]:
+                    colors_to_split.append(c)
+
+            for color_to_split in sorted(colors_to_split):
+                self._split_up_color(
+                    color_to_split=color_to_split,
+                    partition=partition,
+                    color=color,
+                    trace=trace,
+                    active_vertices=active_vertices,
+                    color_degree=color_degree,
+                    min_degree=min_color_degree[color_to_split],
+                    max_degree=max_color_degree[color_to_split],
+                    refine_stack=refine_stack,
+                    in_refine_stack=in_refine_stack,
+                    num_colors=num_colors,
+                )
+
+            ## reset attributes
+            for c in colors_adj:
+                for v in active_vertices[c]:
+                    color_degree[v] = 0
+                max_color_degree[c] = 0
+                active_vertices[c] = []
+                in_colors_adj[c] = 0
+            colors_adj = []
+
+        return num_colors[0], trace, color
+
+    def _split_up_color(
+        self,
+        *,
+        color_to_split: int,
+        partition: list[set[int]],
+        color: NDArray[np.integer],
+        trace: NDArray[np.integer],
+        active_vertices: list[list[int]],
+        color_degree: list[int],
+        min_degree: int,
+        max_degree: int,
+        refine_stack: list[int],
+        in_refine_stack: bytearray,
+        num_colors: list[int],
+    ) -> None:
+        """Splits a color class into subcells based on the color-degrees of its vertices.
+
+        Based on algorithm 3 of Berkholz (2016), *Tight lower and upper bounds
+        for the complexity of canonical color refinement*.
+
+        Given a color class ``color_to_split`` whose vertices exhibit differing
+        color-degrees with respect to the current refining color, this routine
+        partitions that class into new color classes. Vertices with the same
+        color-degree remain together, while vertices with different degrees are
+        assigned fresh color identifiers.
+
+        The largest resulting subcell retains the original color label, while
+        all smaller subcells are assigned new colors and pushed onto the
+        refinement stack (Hopcroft's trick). The partition structure, trace array,
+        number of colors, and vertex-to-color mapping are updated in place.
+
+        Args:
+            color_to_split: The color class to be split.
+            partition: The current partition structure, represented as a list of sets of vertices 
+                ordered by color.
+            color: An array mapping each vertex to its current color.
+            trace: A list of the sizes of each partition cell (color class), ordered by color.
+            active_vertices: Lists of vertices adjacent to the color class being split,
+                ordered by color.
+            color_degree: The color-degree of each vertex.
+            min_degree: Minimum color-degree among vertices in the color class being split.
+            max_degree: Maximum color-degree among vertices in the color class being split.
+            refine_stack: Stack of colors scheduled for refinement.
+            in_refine_stack: Flags indicating which colors are already on the stack.
+            num_colors: The number of colors, used to determine the next color label to assign to
+                newly-refined cells. Stored as a single-element list so that updates persist across
+                calls.
+        """
+        degree_to_new_color = [0] * (max_degree + 1)
+        num_color_degree = [0] * (max_degree + 1)
+        num_color_degree[0] = trace[color_to_split] - len(active_vertices[color_to_split])
+
+        for v in active_vertices[color_to_split]:
+            num_color_degree[color_degree[v]] += 1
+
+        largest_subcell_degree = 0
+        for i in range(1, max_degree + 1):
+            if num_color_degree[i] > num_color_degree[largest_subcell_degree]:
+                largest_subcell_degree = i
+
+        for i in range(max_degree + 1):
+            if num_color_degree[i] > 0:
+                if i == min_degree:
+                    degree_to_new_color[i] = color_to_split
+                    if not in_refine_stack[color_to_split] and i != largest_subcell_degree:
+                        refine_stack.append(degree_to_new_color[i])
+                        in_refine_stack[degree_to_new_color[i]] = 1
+                else:
+                    degree_to_new_color[i] = num_colors[0]
+                    partition[num_colors[0]] = set()
+                    if in_refine_stack[color_to_split] or i != largest_subcell_degree:
+                        refine_stack.append(degree_to_new_color[i])
+                        in_refine_stack[degree_to_new_color[i]] = 1
+                    num_colors[0] += 1
+
+        for v in active_vertices[color_to_split]:
+            new_color = degree_to_new_color[color_degree[v]]
+            if new_color != color_to_split:
+                partition[color_to_split] = partition[color_to_split] - {v} # must create new obj
+                partition[new_color].add(v)
+                trace[color_to_split] -= 1
+                trace[new_color] += 1
+                color[v] = new_color
+
+    def _canon(
+        self,
+        partition: list[set[int]],
+        trace: NDArray[np.integer],
+        color: NDArray[np.integer],
+        num_colors: int,
+        individualized_vertex: int | None = None,
+    ) -> None:
+        """Generate search tree based on iterative color refinement and vertex
+        individualization.
+
+        Loosely based on Algorithm 7.9 from Kreher, D. L., & Stinson, D. R. (1999).
+        Combinatorial algorithms: Generation, enumeration, and search. Additional
+        data structures are used to efficiently track the number of vertices
+        belonging to each color, vertex colors, and number of colors. Additionally,
+        the most recently individualized vertex is tracked and used to perform
+        color refinement more efficiently.
+
+        Color refinement is performed iteratively on a graph until a discrete
+        coloring is achieved. If the coloring is not discrete after refinement,
+        vertices belonging to the same color are individualized, meaning that they
+        are assigned a new color, often breaking the symmetry of the graph and
+        allowing a subsequent color refinement step to produce further refinement.
+
+        By default, graph comparisons using adjacency matrices are not performed, as
+        this becomes a bottleneck for even modestly sized graphs. Instead, the
+        ``trace`` for each graph is compared, which corresponds to the number of
+        vertices belonging to each color, ordered by color. This check is orders of
+        magnitude faster and has been found to have identical pruning capability
+        for graphs of interest, such as chimera, pegasus, and zephyr graphs, as
+        well as the disjoint compositions of smaller and simpler graphs as may
+        be encountered when doing parallel embeddings.
+
+        If a graph has more than one component, comparisons using adjacency matrices are
+        used. This enables isomorphism detection between components, and in turn
+        a more efficient approach to generating the full automorphism group, which
+        may contain many automorphisms between isomorphic components. 
+
+        Kreher and Stinson perform comprehensive pruning by changing the base of
+        the left transversals to coincide with the current permutation order up to the
+        first non-discrete partition cell, or first split. At the cost of performing
+        this base change, it allows pruning to be performed by only considering
+        the left transversal with a stabilizer index equal to the index of the first
+        split. In practice, changing the base at each node of the search tree
+        becomes prohibitively expensive even more mostly sized graphs, and instead
+        the approach taken here is to avoid base changes, but instead to more carefully
+        evaluate which coset representatives to use for pruning. This is done by
+        ignoring the automorphisms that do not respect the current partition structure. 
+
+        Args:
+            partition: The current partition structure, represented as a list of
+                sets of vertices ordered by color.
+            trace: The number of vertices belonging to each color, ordered by color.
+            color: A map from each vertex to its color.
+            num_colors: The number of unique colors, equivalent to the number
+                of cells in the partition.
+            individualized_vertex: The most recently individualized vertex.
+        """
+        self._nodes_reached += 1
+        self._depth += 1
+
+        num_colors, trace, color = self._refine(
+            partition,
+            trace,
+            color,
+            num_colors,
+            individualized_vertex=individualized_vertex
+        )
+
+        if not self._best_perm_exist:
+            self._trace_history.append(trace.tobytes())
+
+        # first non-singleton block index
+        first_split = self._num_nodes - 1
+        for i, block in enumerate(partition):
+            if len(block) > 1:
+                first_split = i
+                break
+
+        compare_result = 2
+        if self._best_perm_exist: # if a leaf node has been reached previously
+
+            if self._compare_adj:
+                perm_candidate = list(chain.from_iterable(p for p in partition if p is not None))
+                compare_result = self._compare(perm_candidate, first_split)
+            else:
+                compare_result = trace.tobytes() == self._trace_history[self._depth - 1]
+
+            if compare_result == 0:
+                return
+
+        if first_split == self._num_nodes - 1: # leaf node reached
+            self._leaf_nodes += 1
+
+            if not self._best_perm_exist:
+                self._best_perm_exist = True
+                self._best_perm[:] = list(chain.from_iterable(partition))
+
+            elif compare_result == 2:
+                perm_candidate = list(chain.from_iterable(partition))
+                self._best_perm[:] = perm_candidate
+
+            elif compare_result == 1:
+                perm_transformed = np.empty(self._num_nodes, dtype=np.intp)
+                perm_candidate = list(chain.from_iterable(partition))
+                perm_transformed[perm_candidate] = self._best_perm
+                self._enter(perm_transformed)
+
+            return
+
+        candidates = sorted(partition[first_split])
+        remaining_in_block = partition[first_split]
+        updated_partition = partition
+        trace[first_split] -= 1
+        trace[num_colors] = 1
+
+        while candidates:
+            vertex = next(iter(candidates))
+            updated_partition[first_split] = remaining_in_block - {vertex}
+            updated_partition[num_colors] = {vertex}
+            individualized_partition = list(updated_partition) # copy outer list
+            color[vertex] = num_colors # updated individualized cell
+            trace_copy = np.array(trace)
+            color_copy = np.array(color)
+
+            self._canon(
+                individualized_partition,
+                trace_copy,
+                color_copy,
+                num_colors + 1,
+                individualized_vertex=vertex
+            )
+
+            color[vertex] = first_split
+            candidates.remove(vertex)
+
+            # prune the search tree using automorphisms
+            for stab_index, u_index in self._u_map.items():
+                if stab_index > vertex: # these automorphisms map vertex to itself
+                    continue
+
+                for g in self._u_vector[u_index]:
+                    if g[vertex] not in candidates:
+                        continue
+
+                    # automorphism must respect current partition structure
+                    for w in candidates:
+                        if color[w] != color[g[w]]:
+                            break
+                    else:
+                        candidates.remove(g[vertex])
+
+            self._depth -= 1
 
     def _compare(self, perm: NDArray[np.intp], first_split: int) -> int:
         """Compare canonical adjacency matrix against itself under a partial permutation.
@@ -319,108 +642,82 @@ class SchreierContext:
                     return 2
         return 1
 
-    def _canon(self, initial_partition: list[set[int]]) -> None:
-        """Generate search tree based on iterative colour refinement and vertex individualization.
+    def _certificate(self) -> bytes:
+        """Generate a canonical certificate for a graph.
 
-        Based on Algorithm 7.9 from Kreher, D. L., & Stinson, D. R. (1999).
-        Combinatorial algorithms: Generation, enumeration, and search.
+        Based on the permutation ``self.best_perm`` that minimizes the binary value
+        of the upper triangular portion of the adjacency matrix of the graph,
+        as found by comparing leaf nodes of the search tree during the search for
+        automorphisms.
 
-        Args:
-            initial_partition: Partition describing the current search tree node.
+        Returns:
+            cert_hash: a hash object of the canonical adjacency bitstring.
         """
-        self._nodes_reached += 1
+        cert_hash = hashlib.sha256()
+        neighbours = self._neighbours
+        best_perm = self._best_perm
 
-        partition = list(initial_partition)
-        self._refine(partition)
-        # first non-singleton block index
-        first_split = self._num_nodes - 1
-        for i, block in enumerate(partition):
-            if len(block) > 1:
-                first_split = i
-                break
+        for j in range(1, self._num_nodes):
+            neighbours_best_j = neighbours[best_perm[j]]
 
-        compare_result = 2
-        if self._best_perm_exist: # if a leaf node has been reached previously
-            perm_candidate = list(chain.from_iterable(partition))
-            compare_result = self._compare(perm_candidate, first_split)
+            for i in range(j):
+                bit = 1 if best_perm[i] in neighbours_best_j else 0
+                cert_hash.update(bytes([bit]))
 
-        if first_split == self._num_nodes - 1: # if partition is discrete
-            self._leaf_nodes += 1
-            if not self._best_perm_exist:
-                self._best_perm_exist = True
-                self._best_perm[:] = list(chain.from_iterable(partition))
-            else:
-                if compare_result == 2:
-                    self._best_perm[:] = perm_candidate
-                elif compare_result == 1:
-                    perm_transformed = np.empty(self._num_nodes, dtype=np.int64)
-                    perm_transformed[perm_candidate] = self._best_perm
-                    self._enter(perm_transformed)
+        return cert_hash.digest()
 
-        else:
-            if compare_result != 0:
-                candidates = partition[first_split].copy()
-                remaining_in_block = partition[first_split].copy()
-                updated_partition = [None] * self._num_nodes
-                for j in range(first_split):
-                    updated_partition[j] = partition[j]
-                for j in range(first_split + 1, len(partition)):
-                    updated_partition[j + 1] = partition[j]
+    def _initial_partition(self) -> tuple[list[set[int] | None], np.ndarray, np.ndarray, int]:
+        """Initialize the initial partition for a graph.
 
-                while candidates:
-                    vertex = next(iter(candidates))
-                    updated_partition[first_split] = {vertex}
-                    updated_partition[first_split + 1] = remaining_in_block - {vertex}
-                    individualized_partition = [x for x in updated_partition if x is not None]
+        Currently this only supports graphs whose vertices are initially the same
+        color, but could be expanded in the future to accommodate graphs with a
+        non-trivial initial vertex coloring.
 
-                    # update block indices
-                    for idx, block in enumerate(individualized_partition):
-                        for v in block:
-                            self._vertex_block_index[v] = idx
+        Returns:
+            partition: The initial partition structure, represented as a list of sets of vertices 
+                ordered by color.
+            trace: A list of the sizes of each partition cell (color class), ordered by color.
+            color: An array mapping each vertex to its current color.
+            num_colors: The number of colors in the initial partition.
+        """
+        partition = [set(self._nodes)] + [None] * (self._num_nodes - 1)
+        trace = np.zeros(self._num_nodes, dtype=self._color_dtype)
+        trace[0] = self._num_nodes
+        color = np.zeros(self._num_nodes, dtype=self._color_dtype)
+        num_colors = 1
 
-                    self._canon(individualized_partition)
+        return partition, trace, color, num_colors
 
-                    beta_prime = np.array([-1] * self._num_nodes, dtype=np.intp)
-                    seen_vertices = set()
-                    base_idx = -1
-                    for block in individualized_partition:
-                        base_idx += 1
-                        rep = next(iter(block))
-                        beta_prime[base_idx] = rep
-                        seen_vertices.add(rep)
 
-                    for v in self._nodes:
-                        if v not in seen_vertices:
-                            base_idx += 1
-                            beta_prime[base_idx] = v
-
-                    self._change_base(beta_prime)
-
-                    candidates.discard(self._identity[vertex])
-                    # remove images under generators in the first non-discrete partition
-                    if first_split in self._u_map:
-                        for g in self._u_vector[self._u_map[first_split]]:
-                            candidates.discard(g[vertex])
-
-def vertex_orbits(u_vector: list[list[NDArray[np.intp]]], nodes: list[int]) -> list[list[int]]:
+def vertex_orbits(
+    u_vector: list[list[NDArray[np.intp]]],
+    nodes: list[int],
+    index_to_node: Mapping[int, int] | None = None,
+) -> list[list[int]]:
     """Calculate vertex orbits using breadth-first search.
 
     If ``u_vector`` contains no coset representatives, trivial orbits are returned.
 
     Args:
-        u_vector: Coset representatives with respect to base beta, grouped
-            by stabilizer index.
+        u_vector: Coset representatives grouped by stabilizer index.
         nodes: List of vertex indices used to return trivial orbits when ``u_vector`` is empty.
+        index_to_node: An optional dictionary for returning orbits with their original node labels.
 
     Returns:
         A list of orbits, each orbit is a list of vertex indices.
 
     Example:
-    >>> from dwave.experimental.automorphism import vertex_orbits, schreier_rep
-    ...
-    >>> result = schreier_rep(G)
-    >>> orbits = vertex_orbits(result._u_vector)
-    >>> # orbits might look like [[0,2,3], [1,4]] where each sublist is an orbit
+        >>> import numpy as np
+        >>> from dwave.experimental.automorphism import vertex_orbits
+        ...
+        >>> u_vector = [
+        ...     [np.array([0, 1, 4, 3, 2, 6, 5, 7])],
+        ...     [np.array([2, 1, 4, 3, 0, 7, 5, 6]), np.array([4, 1, 0, 3, 2, 6, 7, 5])],
+        ...     [np.array([0, 3, 2, 1, 4, 5, 6, 7])],
+        ... ]
+        >>> nodes = list(range(8))
+        >>> vertex_orbits(u_vector, nodes)
+        [[0, 2, 4], [1, 3], [5, 6, 7]]
     """
     if not u_vector:
         return [[x] for x in nodes]
@@ -439,13 +736,14 @@ def vertex_orbits(u_vector: list[list[NDArray[np.intp]]], nodes: list[int]) -> l
     num_nodes = len(nodes)
     generators = [g for u_vector_i in u_vector for g in u_vector_i]
     generators.append(np.arange(num_nodes))
+    label = (lambda x: index_to_node[x]) if index_to_node is not None else int
 
     for v_start in nodes:
         if v_start in visited:
             continue
 
         visited.add(v_start)
-        orb = [v_start]
+        orb = [label(v_start)]
 
         q = deque([v_start])
         while q:
@@ -456,32 +754,46 @@ def vertex_orbits(u_vector: list[list[NDArray[np.intp]]], nodes: list[int]) -> l
                 if v_current not in visited:
                     visited.add(v_current)
                     q.append(v_current)
-                    orb.append(int(v_current))
+                    orb.append(label(v_current))
+        orb.sort()
+        orbits.append(orb)
 
-        orbits.append(sorted(orb))
-
+    orbits.sort()
     return orbits
 
 
 def edge_orbits(
-        u_vector: list[list[NDArray[np.intp]]],
-        edges: list[tuple[int, int]],
+    u_vector: list[list[NDArray[np.intp]]],
+    edges: list[tuple[int, int]],
+    index_to_node: Mapping[int, int] | None = None,
 ) -> list[list[int]]:
     """Calculate edge orbits using breadth-first search.
 
     Args:
-        u_vector: Coset representatives with respect to base beta, grouped
-            by stabilizer index.
+        u_vector: Coset representatives grouped by stabilizer index.
         edges: List of graph edges as tuples of vertex index pairs.
 
     Returns:
         A list of orbits, each orbit is a list of edges (tuples of vertex index pairs).
 
     Example:
-    >>> from dwave.experimental.automorphism import edge_orbits, schreier_rep
-    >>> result = schreier_rep(G)
-    >>> orbits = edge_orbits(G.edges(), result._u_vector)
-    >>> # orbits might look like [[(0, 1), (2, 3)], [(0, 2)]] where each sublist is an orbit
+        >>> import numpy as np
+        >>> from dwave.experimental.automorphism import edge_orbits
+        ...
+        >>> u_vector = [
+        ...     [np.array([0, 1, 4, 3, 2, 6, 5, 7])],
+        ...     [np.array([2, 1, 4, 3, 0, 7, 5, 6]), np.array([4, 1, 0, 3, 2, 6, 7, 5])],
+        ...     [np.array([0, 3, 2, 1, 4, 5, 6, 7])],
+        ... ]
+        >>> edges = [
+        ...     (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
+        ...     (6, 7), (7, 0), (0, 3), (1, 4), (2, 6), (5, 7)
+        ... ]
+        >>> orbits = edge_orbits(u_vector, edges)
+        >>> orbits[0]
+        [(0, 1), (0, 3), (1, 2), (1, 4), (2, 3), (3, 4)]
+        >>> orbits[1:]
+        [[(0, 7), (2, 6), (4, 5)], [(5, 6), (5, 7), (6, 7)]]
     """
     if not u_vector:
         return [[x] for x in edges]
@@ -495,6 +807,7 @@ def edge_orbits(
     visited = set()
     orbits = []
     generators = [g for u_vector_i in u_vector for g in u_vector_i]
+    label = (lambda x: index_to_node[x]) if index_to_node is not None else int
 
     for u_start, v_start in edges:
         e_start = (u_start, v_start) if u_start < v_start else (v_start, u_start)
@@ -503,7 +816,7 @@ def edge_orbits(
             continue
 
         visited.add(e_start)
-        orb = [e_start]
+        orb = [tuple(label(x) for x in e_start)]
 
         q = deque([e_start])
         while q:
@@ -514,17 +827,19 @@ def edge_orbits(
                 if e_current not in visited:
                     visited.add(e_current)
                     q.append(e_current)
-                    orb.append(tuple(int(x) for x in e_current))
+                    orb.append(tuple(label(x) for x in e_current))
 
-        orbits.append(sorted(orb))
+        orb.sort()
+        orbits.append(orb)
 
+    orbits.sort()
     return orbits
 
 
 def sample_automorphisms(
     u_vector: list[list[NDArray[np.intp]]],
     num_samples: int = 1,
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> list[NDArray[np.intp]]:
     """Uniformly sample automorphisms from the Schreier-Sims representation.
 
@@ -535,8 +850,7 @@ def sample_automorphisms(
     automorphisms are ignored.
 
     Args:
-        u_vector: Coset representatives with respect to base beta, grouped
-            by stabilizer index.
+        u_vector: Coset representatives grouped by stabilizer index.
         num_samples: The number of automorphisms to return.
         seed: Random seed for reproducibility.
 
@@ -544,10 +858,15 @@ def sample_automorphisms(
         A list of uniformly sampled automorphisms in one-line notation.
 
     Example:
-    >>> ctx = SchreierContext(G)
-    >>> automorphisms = ctx.sample_automorphisms()
-    >>> # automorphisms might look like [array([2, 0, 3, 1, 6, 7, 4, 5]),
-    >>> # array([5, 4, 6, 7, 0, 1, 3, 2])]
+        >>> import networkx as nx
+        >>> from dwave.experimental.automorphism import schreier_rep, sample_automorphisms
+        ...
+        >>> graph = nx.cycle_graph(8)
+        >>> result = schreier_rep(graph)
+        >>> sample_automorphisms(result.u_vector, seed=42)
+        [array([3, 4, 5, 6, 7, 0, 1, 2])]
+        >>> sample_automorphisms(result.u_vector, num_samples=2, seed=42)
+        [array([3, 4, 5, 6, 7, 0, 1, 2]), array([6, 5, 4, 3, 2, 1, 0, 7])]
     """
     rng = np.random.default_rng(seed)
     num_nodes = len(u_vector[0][0])
@@ -558,9 +877,9 @@ def sample_automorphisms(
         sample_indices = rng.integers(low=-1, high=u_counts)
         g_product = np.arange(num_nodes)
 
-        for i in range(len(u_vector)):
+        for i, u_i in enumerate(u_vector):
             if sample_indices[i] >= 0:
-                g = u_vector[i][sample_indices[i]]
+                g = u_i[sample_indices[i]]
                 g_product = mult(g, g_product)
 
         sampled_automorphisms.append(g_product)
@@ -584,8 +903,8 @@ def mult(alpha: NDArray[np.intp], beta: NDArray[np.intp]) -> NDArray[np.intp]:
         ...
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
         >>> beta  = np.array([1,2,0], dtype=np.intp) # (0,1,2): 0->1, 1->2, 2->0
-        >>> mult(alpha, beta)   # doctest: +SKIP
-        array([0,1,2], dtype=intp) # (0)(1)(2): 0->0, 1->1, 2->2
+        >>> mult(alpha, beta)
+        array([0, 1, 2])
     """
     return alpha[beta]
 
@@ -605,8 +924,8 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
         >>> from dwave.experimental.automorphism import inv
         ...
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
-        >>> inv(3, alpha)   # doctest: +SKIP
-        np.array([1,2,0], dtype=np.intp) # (0,1,2): 0->1, 1->2, 2->0
+        >>> inv(3, alpha)
+        array([1, 2, 0])
     """
     alpha_inv = np.empty(n, dtype=np.intp)
     alpha_inv[alpha] = np.arange(n, dtype=alpha_inv.dtype)
@@ -614,17 +933,26 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
 
 
 def schreier_rep(
-        graph: nx.Graph,
-        num_samples: Optional[int] = None,
-        seed: int = 42
+    graph: nx.Graph,
+    num_samples: int | None = None,
+    seed: int = 42,
 ) -> SchreierContext:
     """Compute Schreier representatives and orbits for a graph.
 
-    Builds a depth-first search tree, iteratively performing colour refinement
+    Builds a depth-first search tree, iteratively performing color refinement
     and vertex individualization until leaf nodes are reached where all graph
-    vertices are uniquely coloured. Leaf nodes with identical adjacency matrices
+    vertices are uniquely colored. Leaf nodes with identical adjacency matrices
     represent graph automorphisms. Discovered automorphisms are used to prune
     the search tree.
+
+    If graphs have more than one component, automorphisms are found for each
+    individual component, and automorphisms between components are determined
+    by considering which components are isomorphic. Since the number of automorphisms
+    between isomorphic components scales factorially with the number of components,
+    this is significantly faster than naively performing refinement-individualization
+    over the whole graph. It would be possible to update ``u_vector`` directly
+    without using ``enter()``, which in principle should be even faster, and should
+    be the first place to look if further performance improvements are required.
 
     Args:
         graph: A NetworkX Graph object representing the input graph containing
@@ -637,16 +965,80 @@ def schreier_rep(
             from the existing set. If not provided, all coset representatives are used.
         seed: Random seed for reproducibility. Defaults to 42.
     """
-    ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
-    initial_partition = [set(ctx._nodes)]
+    if nx.number_connected_components(graph) == 1:
+        ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
+        initial_partition, trace, color, num_colors = ctx._initial_partition()
+        ctx._canon(initial_partition, trace, color, num_colors)
+        return ctx
 
-    ctx._canon(initial_partition)
-    ctx._change_base(ctx._identity)
+    # relabel vertices so components have contiguous labels
+    index_to_node = {}
+    node_to_index = {}
+    next_label = 0
+
+    component_vertices = list(nx.connected_components(graph))
+    for vertices in component_vertices:
+        for vertex in sorted(vertices):
+            node_to_index[vertex] = next_label
+            index_to_node[next_label] = vertex
+            next_label += 1
+
+    graph = nx.relabel_nodes(graph, node_to_index, copy=True)
+
+    # enter component automorphisms into global graph
+    ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
+    ctx._index_to_node = index_to_node
+    ctx._node_to_index = node_to_index
+
+    # group isomorphic components together
+    components = [ctx._graph.subgraph(c).copy() for c in nx.connected_components(ctx._graph)]
+
+    unique_components = {}
+    for comp in components:
+        ctx_comp = SchreierContext(comp, num_samples=num_samples, seed=seed)
+        ctx_comp._compare_adj = True
+
+        initial_partition, trace, color, num_colors = ctx_comp._initial_partition()
+        ctx_comp._canon(initial_partition, trace, color, num_colors)
+
+        ctx._nodes_reached += ctx_comp.nodes_reached # update the global search tree statistics
+        ctx._leaf_nodes += ctx_comp.leaf_nodes
+
+        unique_components.setdefault(ctx_comp._certificate(), []).append(
+            ComponentInfo(ctx_comp._u_vector, np.array(sorted(comp.nodes())), ctx_comp._best_perm)
+        )
+
+    # enter the local automorphisms
+    graph_nnodes = ctx._graph.number_of_nodes()
+    for identical_components in unique_components.values():
+        for comp in identical_components:
+            for u in chain.from_iterable(comp.u_vector):
+                u_global = np.arange(graph_nnodes)
+                u_global[comp.nodes] = u_global[comp.nodes][u]
+                ctx._enter(u_global, mode=EnterMode.NO_RECURSE)
+
+    # enter swap automorphisms
+    for comps in unique_components.values():
+        for i in range(len(comps) - 1):
+            i_nodes = comps[i].nodes
+            j_nodes = comps[i + 1].nodes
+
+            # swap automorphisms must be entered in the canonical basis
+            i_canon_perm = comps[i].best_perm
+            j_canon_perm = comps[i + 1].best_perm
+            i_canon = i_nodes[i_canon_perm]
+            j_canon = j_nodes[j_canon_perm]
+
+            u_global = np.arange(graph_nnodes)
+            u_global[i_canon], u_global[j_canon] = u_global[j_canon], u_global[i_canon]
+            ctx._enter(u_global, mode=EnterMode.RECURSE_ONCE)
 
     return ctx
 
-
-def array_to_cycle(array: NDArray[np.intp]) -> str:
+def array_to_cycle(
+    array: NDArray[np.intp],
+    index_to_node: Mapping[int, Hashable] | None = None
+) -> str:
     """Convert an array in one-line notation to a string in cycle notation.
 
     Based on Algorithm 6.4 from Kreher, D. L., & Stinson, D. R. (1999).
@@ -654,6 +1046,8 @@ def array_to_cycle(array: NDArray[np.intp]) -> str:
 
     Args:
         array: The permutation in one-line notation.
+        index_to_node: An optional relabelling dictionary. By default, array indices
+            are used.
 
     Returns:
         The permutation as a string in cycle notation.
@@ -665,21 +1059,30 @@ def array_to_cycle(array: NDArray[np.intp]) -> str:
         >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
         >>> array_to_cycle(alpha)
         '(0,2,1)'
+        >>> array_to_cycle(np.array([2,0,1]), index_to_node={0: 5, 1: 7, 2: 9})
+        '(5,9,7)'
     """
+    if index_to_node is not None:
+        expected = set(range(len(array)))
+        if index_to_node.keys() != expected:
+            missing = expected - index_to_node.keys()
+            raise ValueError(f"index_to_node missing keys: {missing}")
+
+    label = (lambda x: str(index_to_node[x])) if index_to_node is not None else str
     unvisited = [True] * len(array)
     cycle_parts = []
 
     for i in range(len(array)):
         if unvisited[i]:
             cycle_parts.append('(')
-            cycle_parts.append(str(i))
+            cycle_parts.append(label(i))
             unvisited[i] = False
             j = i
 
             while unvisited[array[j]]:
                 cycle_parts.append(',')
                 j = array[j]
-                cycle_parts.append(str(j))
+                cycle_parts.append(label(j))
                 unvisited[j] = False
 
             cycle_parts.append(')')
