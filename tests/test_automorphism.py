@@ -611,5 +611,134 @@ class Automorphisms(unittest.TestCase):
         ctx = SchreierContext(big_graph)
         self.assertEqual(ctx._color_dtype, np.uint32)
 
+
+class TestGraphColoring(unittest.TestCase):
+    def test_initial_partition_structure(self):
+        """_initial_partition produces correct partition, trace, color, and num_colors."""
+        graph = nx.cycle_graph(4)
+        coloring = {0: 0, 1: 1, 2: 0, 3: 1}
+        ctx = SchreierContext(graph, graph_coloring=coloring)
+        partition, trace, color, num_colors = ctx._initial_partition()
+        self.assertEqual(num_colors, 2)
+        self.assertEqual(partition[0], {0, 2})
+        self.assertEqual(partition[1], {1, 3})
+        np.testing.assert_array_equal(color[:4], [0, 1, 0, 1])
+        np.testing.assert_array_equal(trace[:2], [2, 2])
+
+    def test_coloring_missing_nodes_raises(self):
+        """graph_coloring that omits a node raises ValueError."""
+        graph = nx.cycle_graph(4)
+        coloring = {0: 0, 1: 1, 2: 0}  # missing node 3
+        with self.assertRaisesRegex(ValueError, "missing nodes"):
+            SchreierContext(graph, graph_coloring=coloring)
+
+    def test_coloring_extra_nodes_raises(self):
+        """graph_coloring with nodes not in the graph raises ValueError."""
+        graph = nx.cycle_graph(4)
+        coloring = {0: 0, 1: 1, 2: 0, 3: 1, 99: 0} # extra node 99
+        with self.assertRaisesRegex(ValueError, "not in graph"):
+            SchreierContext(graph, graph_coloring=coloring)
+
+    def test_biclique_bipartite(self):
+        """Bipartite coloring of K3,3 prevents side-swapping, halving 72 to 36."""
+        graph = nx.Graph()
+        graph.add_edges_from([(i, j) for i in range(3) for j in range(3, 6)])
+        coloring = {0: 0, 1: 0, 2: 0, 3: 1, 4: 1, 5: 1}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 36)
+        self.assertEqual(result.vertex_orbits, [[0, 1, 2], [3, 4, 5]])
+
+    def test_uniform_coloring_matches_uncolored(self):
+        """All-same-color gives identical results to no coloring."""
+        graph = nx.cycle_graph(8)
+        coloring = {i: 0 for i in range(8)}
+        colored = schreier_rep(graph, graph_coloring=coloring)
+        plain = schreier_rep(graph)
+        self.assertEqual(colored.num_automorphisms, plain.num_automorphisms)
+        self.assertEqual(colored.vertex_orbits, plain.vertex_orbits)
+        self.assertEqual(colored.edge_orbits, plain.edge_orbits)
+
+    def test_path_asymmetric_coloring_breaks_flip(self):
+        """Asymmetric coloring on P5 eliminates all non-trivial automorphisms."""
+        graph = nx.path_graph(5)
+        coloring = {0: 0, 1: 1, 2: 0, 3: 0, 4: 1}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 1)
+
+    def test_kreher_orbit_respecting_coloring(self):
+        """Coloring that respects Kreher orbits preserves all 12 automorphisms.
+
+        Orbits of the uncolored Kreher graph: {0,2,4}, {1,3}, {5,6,7}.
+        Assigning one color per orbit leaves every automorphism color-preserving.
+        """
+        edges = [
+            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
+            (6, 7), (7, 0), (0, 3), (1, 4), (2, 6), (5, 7),
+        ]
+        graph = nx.Graph()
+        graph.add_nodes_from(range(8))
+        graph.add_edges_from(edges)
+        coloring = {0: 0, 2: 0, 4: 0, 1: 1, 3: 1, 5: 2, 6: 2, 7: 2}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 12)
+
+    def test_kreher_orbit_breaking_coloring(self):
+        """Coloring that splits a Kreher orbit reduces automorphisms.
+
+        Giving node 0 its own color (separating it from 2 and 4) restricts to
+        Stab(0) which has order |Aut|/|Orb(0)| = 12/3 = 4 by orbit-stabilizer.
+        """
+        edges = [
+            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6),
+            (6, 7), (7, 0), (0, 3), (1, 4), (2, 6), (5, 7),
+        ]
+        graph = nx.Graph()
+        graph.add_nodes_from(range(8))
+        graph.add_edges_from(edges)
+        coloring = {0: 0, 2: 1, 4: 1, 1: 2, 3: 2, 5: 3, 6: 3, 7: 3}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 4)
+        self.assertEqual(result.vertex_orbits, [[0], [1, 3], [2, 4], [5, 6], [7]])
+
+    def test_coloring_with_string_labels(self):
+        """Graph coloring works with string node labels."""
+        graph = nx.Graph()
+        graph.add_edges_from([('a', 'b'), ('b', 'c'), ('c', 'd'), ('d', 'e')])
+        coloring = {'a': 0, 'b': 1, 'c': 0, 'd': 1, 'e': 0}  # mirror-symmetric coloring on P5
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 2)
+
+    def test_disjoint_k3_same_coloring_allows_swap(self):
+        """Two K3 components with identical coloring can be swapped."""
+        graph = nx.disjoint_union_all([nx.complete_graph(3)] * 2)
+        coloring = {0: 'A', 1: 'A', 2: 'A', 3: 'A', 4: 'A', 5: 'A'}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 72)
+        for orbit in result.vertex_orbits:
+            colors = {coloring[result.index_to_node[v]] for v in orbit}
+            self.assertEqual(len(colors), 1)
+
+    def test_disjoint_k3_different_coloring_blocks_swap(self):
+        """Two K3 components with different colorings cannot be swapped."""
+        graph = nx.disjoint_union_all([nx.complete_graph(3)] * 2)
+        coloring = {0: 'A', 1: 'A', 2: 'A', 3: 'B', 4: 'B', 5: 'B'}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 36)
+        for orbit in result.vertex_orbits:
+            colors = {coloring[result.index_to_node[v]] for v in orbit}
+            self.assertEqual(len(colors), 1)
+
+    def test_isolated_nodes_with_coloring(self):
+        """Isolated nodes (components of size 1) with coloring."""
+        graph = nx.Graph()
+        graph.add_nodes_from(range(5))
+        coloring = {0: 'A', 1: 'B', 2: 'A', 3: 'A', 4: 'B'}
+        result = schreier_rep(graph, graph_coloring=coloring)
+        self.assertEqual(result.num_automorphisms, 12)
+        for orbit in result.vertex_orbits:
+            colors = {coloring[result.index_to_node[v]] for v in orbit}
+            self.assertEqual(len(colors), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

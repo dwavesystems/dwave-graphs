@@ -13,17 +13,17 @@
 # limitations under the License.
 
 from collections import deque
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 import hashlib
 from itertools import chain
 import random
-from typing import Mapping
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
+
 
 @dataclass
 class ComponentInfo:
@@ -46,8 +46,16 @@ class SchreierContext:
         num_samples: Number of samples to use for generating new coset representatives
             from the existing set. If not provided, all coset representatives are used.
         seed: Seed used for reproducibility. Defaults to 42.
+        graph_coloring: Optional mapping from original vertex label to color label.
+            When provided, the initial partition separates vertices by color.
     """
-    def __init__(self, graph: nx.Graph, num_samples: int | None = None, seed: int = 42) -> None:
+    def __init__(
+        self,
+        graph: nx.Graph,
+        num_samples: int | None = None,
+        seed: int = 42,
+        graph_coloring: Mapping[Hashable, int] | None = None,
+    ) -> None:
         original_nodes_sorted = sorted(graph.nodes())
         self._index_to_node: dict[int, Hashable] = {
             new: old for new, old in enumerate(original_nodes_sorted)
@@ -56,6 +64,23 @@ class SchreierContext:
             old: new for new, old in enumerate(original_nodes_sorted)
         }
         graph = nx.relabel_nodes(graph, self._node_to_index)  # relabel nodes contiguously (0...n-1)
+
+        # Validate and store graph coloring
+        self._graph_coloring = graph_coloring
+        if graph_coloring is not None:
+            coloring_keys = set(graph_coloring.keys())
+            graph_nodes = set(original_nodes_sorted)
+            missing = graph_nodes - coloring_keys
+            extra = coloring_keys - graph_nodes
+            if missing:
+                raise ValueError(f"graph_coloring is missing nodes: {missing}")
+            if extra:
+                raise ValueError(f"graph_coloring contains nodes not in graph: {extra}")
+            self._graph_coloring_internal: dict[int, int] | None = {
+                self._node_to_index[v]: c for v, c in graph_coloring.items()
+            }
+        else:
+            self._graph_coloring_internal = None
 
         self._nodes: list[int] = list(graph.nodes())
         self._num_nodes: int = graph.number_of_nodes()
@@ -650,6 +675,11 @@ class SchreierContext:
         as found by comparing leaf nodes of the search tree during the search for
         automorphisms.
 
+        When ``self._graph_coloring_internal`` is set (a dict mapping internal vertex
+        indices to color labels), the vertex colors in canonical order are appended
+        to the hash so that structurally identical components with different coloring
+        patterns receive distinct certificates.
+
         Returns:
             cert_hash: a hash object of the canonical adjacency bitstring.
         """
@@ -664,9 +694,17 @@ class SchreierContext:
                 bit = 1 if best_perm[i] in neighbours_best_j else 0
                 cert_hash.update(bytes([bit]))
 
+        if self._graph_coloring_internal is not None:
+            for j in range(self._num_nodes):
+                c = self._graph_coloring_internal[best_perm[j]]
+                cert_hash.update(repr(c).encode('utf-8'))
+                cert_hash.update(b'\0')
+
         return cert_hash.digest()
 
-    def _initial_partition(self) -> tuple[list[set[int] | None], np.ndarray, np.ndarray, int]:
+    def _initial_partition(
+        self,
+    ) -> tuple[list[set[int] | None], np.ndarray, np.ndarray, int]:
         """Initialize the initial partition for a graph.
 
         Currently this only supports graphs whose vertices are initially the same
@@ -680,11 +718,26 @@ class SchreierContext:
             color: An array mapping each vertex to its current color.
             num_colors: The number of colors in the initial partition.
         """
-        partition = [set(self._nodes)] + [None] * (self._num_nodes - 1)
         trace = np.zeros(self._num_nodes, dtype=self._color_dtype)
-        trace[0] = self._num_nodes
         color = np.zeros(self._num_nodes, dtype=self._color_dtype)
-        num_colors = 1
+        graph_coloring = self._graph_coloring
+
+        if graph_coloring is None:
+            partition = [set(self._nodes)] + [None] * (self._num_nodes - 1)
+            trace[0] = self._num_nodes
+            num_colors = 1
+        else:
+            unique_colors = sorted(set(graph_coloring.values()))
+            remap = {c: i for i, c in enumerate(unique_colors)}
+            num_colors = len(unique_colors)
+            partition = [set() for _ in range(num_colors)] + [None] * (self._num_nodes - num_colors)
+            for node_label, node_color in graph_coloring.items():
+                node_index = self.node_to_index[node_label]
+                partition[remap[node_color]].add(node_index)
+
+            for i, nodes in enumerate(partition[:num_colors]):
+                color[list(nodes)] = i
+                trace[i] = len(nodes)
 
         return partition, trace, color, num_colors
 
@@ -936,6 +989,7 @@ def schreier_rep(
     graph: nx.Graph,
     num_samples: int | None = None,
     seed: int = 42,
+    graph_coloring: Mapping[Hashable, int] | None = None,
 ) -> SchreierContext:
     """Compute Schreier representatives and orbits for a graph.
 
@@ -964,10 +1018,13 @@ def schreier_rep(
         num_samples: Number of samples to use for generating new coset representatives
             from the existing set. If not provided, all coset representatives are used.
         seed: Random seed for reproducibility. Defaults to 42.
+        graph_coloring: Optional mapping from original vertex label to color label.
     """
     if nx.number_connected_components(graph) == 1:
-        ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
+        ctx = SchreierContext(graph, num_samples=num_samples, seed=seed,
+                              graph_coloring=graph_coloring)
         initial_partition, trace, color, num_colors = ctx._initial_partition()
+
         ctx._canon(initial_partition, trace, color, num_colors)
         return ctx
 
@@ -995,7 +1052,14 @@ def schreier_rep(
 
     unique_components = {}
     for comp in components:
-        ctx_comp = SchreierContext(comp, num_samples=num_samples, seed=seed)
+        # extract per-component coloring keyed by the component's node labels
+        comp_coloring = None
+        if graph_coloring is not None:
+            comp_coloring = {v: graph_coloring[index_to_node[v]] for v in comp.nodes()}
+
+        ctx_comp = SchreierContext(
+            comp, num_samples=num_samples, seed=seed, graph_coloring=comp_coloring
+        )
         ctx_comp._compare_adj = True
 
         initial_partition, trace, color, num_colors = ctx_comp._initial_partition()
@@ -1037,7 +1101,7 @@ def schreier_rep(
 
 def array_to_cycle(
     array: NDArray[np.intp],
-    index_to_node: Mapping[int, Hashable] | None = None
+    index_to_node: Mapping[int, Hashable] | None = None,
 ) -> str:
     """Convert an array in one-line notation to a string in cycle notation.
 
