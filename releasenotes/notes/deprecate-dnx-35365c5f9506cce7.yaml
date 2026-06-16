@@ -1,0 +1,25 @@
+---
+prelude: >
+    ``dwave-networkx`` is deprecated and will be replaced by ``dwave-graphs`` in
+    Ocean 10. Most functionality previously provided by ``dwave-networkx`` is now
+    available as part of ``dwave-graphs`` under the ``dwave.graphs`` namespace.
+
+    See `dwave-graphs <https://github.com/dwavesystems/dwave-graphs/releases/tag/1.0.0>`_.
+upgrade:
+  - |
+    Algorithms previously provided in the ``dwave_networkx.algorithms``
+    module are now available in ``dwave-graphs`` under the ``dwave.graphs.algorithms``
+    namespace. Binary and constrained quadratic model generators have been moved
+    to ``dimod.generators``.
+  - |
+    Graph drawing utilities previously provided in the ``dwave_networkx.drawing`` module
+    are now available in ``dwave-graphs`` under the ``dwave.graphs.drawing`` namespace.
+  - |
+    Graph generators previously provided in the ``dwave_networkx.generators`` module
+    are now available in ``dwave-graphs`` under the ``dwave.graphs.topologies`` namespace.
+  - |
+    Functionality previously provided in the ``dwave_networkx.default_sampler``
+    module has been removed in `dwave-graphs`.
+  - |
+    Functionality previously provided in the ``dwave_networkx.utils``
+    module has been removed in ``dwave-graphs``.
