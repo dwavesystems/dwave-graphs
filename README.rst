@@ -5,10 +5,7 @@
 .. image:: https://img.shields.io/pypi/v/dwave-networkx.svg
     :target: https://pypi.org/project/dwave-networkx
 
-.. image:: https://codecov.io/gh/dwavesystems/dwave-networkx/branch/main/graph/badge.svg
-    :target: https://codecov.io/gh/dwavesystems/dwave-networkx
-
-.. image:: https://circleci.com/gh/dwavesystems/dwave-networkx.svg?style=svg
+.. image:: https://circleci.com/gh/dwavesystems/dwave-graphs.svg?style=shield&branch=legacy/dwave-networkx
     :target: https://circleci.com/gh/dwavesystems/dwave-networkx
 
 ==============
