@@ -172,6 +172,7 @@ def zephyr_graph(
         labels = 'coordinate'
     else:
         labels = 'int'
+
         def label(u: int, w: int, k: int, j: int, z: int) -> int:
             return (((u * M + w) * t + k) * 2 + j) * m + z
 
@@ -179,31 +180,32 @@ def zephyr_graph(
                     ("tile", t), ("data", data), ("labels", labels))
 
     G.graph.update(construction)
-    
+
     if edge_list is None:
         check_edge_list = False
     if node_list is None:
         check_node_list = False
-    
+
     if edge_list is None or check_edge_list is True:
         # external edges
         G.add_edges_from((label(u, w, k, j, z), label(u, w, k, j, z + 1))
                          for u, w, k, j, z in product(
-                            (0, 1), range(M), range(t), (0, 1), range(m-1)
-                         ))
+            (0, 1), range(M), range(t), (0, 1), range(m-1)
+        ))
 
         # odd edges
         G.add_edges_from((label(u, w, k, 0, z), label(u, w, k, 1, z-a))
                          for u, w, k, a in product(
-                            (0, 1), range(M), range(t), (0, 1)
-                         )
-                         for z in range(a, m))
+            (0, 1), range(M), range(t), (0, 1)
+        )
+            for z in range(a, m))
 
         # internal edges
         G.add_edges_from((label(0, 2*w+1+a*(2*i-1), k, j, z), label(1, 2*z+1+b*(2*j-1), h, i, w))
                          for w, z, h, k, i, j, a, b in product(
-                            range(m), range(m), range(t), range(t), (0, 1), (0, 1), (0, 1), (0, 1)
-                         ))
+            range(m), range(m), range(t), range(
+                t), (0, 1), (0, 1), (0, 1), (0, 1)
+        ))
         if edge_list is not None:
             _add_compatible_edges(G, edge_list)
     else:
@@ -395,6 +397,7 @@ def _double_chimera_zephyr_sublattice_mapping(
 
     """
     t, y_offset, x_offset, j0, j1 = offset
+
     def mapping(q):
         y, x, u, k = source_to_chimera(q)
         wz, kz = divmod(k, t)
@@ -438,11 +441,11 @@ def zephyr_sublattice_mappings(
     ``_zephyr_zephyr_sublattice_mapping``,
     ``_double_chimera_zephyr_sublattice_mapping``, and
     ``_single_chimera_zephyr_sublattice_mapping`` internal functions in the source code.
-    
+
     .. [#]
         The yield is the percentage of working qubits on a QPU and the subset 
         of available qubits is called the :ref:`working graph <qpu_topologies>`.
-        
+
     Args:
         source:
             The Chimera or Zephyr graph that nodes are input from.
@@ -472,7 +475,8 @@ def zephyr_sublattice_mappings(
         this function does not handle that complex task.
     """
     if target.graph.get('family') != 'zephyr':
-        raise ValueError("Source graph must be a Zephyr graph constructed by dwave.graphs.zephyr_graph")
+        raise ValueError(
+            "Source graph must be a Zephyr graph constructed by dwave.graphs.zephyr_graph")
 
     # import for single use below; avoids circular import
     from dwave.graphs.topologies.zephyr.coords import _zephyr_coordinates_cache
@@ -517,9 +521,11 @@ def zephyr_sublattice_mappings(
             def source_to_inner(q):
                 return q
         elif labels_s == 'int':
-            source_to_inner = _chimera_coordinates_cache[m_s, n_s, t_t].linear_to_chimera
+            source_to_inner = _chimera_coordinates_cache[m_s,
+                                                         n_s, t_t].linear_to_chimera
         else:
-            raise ValueError(f"Chimera node labeling {labels_s} not recognized")
+            raise ValueError(
+                f"Chimera node labeling {labels_s} not recognized")
 
     elif source.graph.get('family') == 'zephyr':
         m_s = source.graph['rows']
@@ -529,7 +535,8 @@ def zephyr_sublattice_mappings(
 
         labels_s = source.graph['labels']
         if labels_s == 'int':
-            source_to_inner = _zephyr_coordinates_cache[m_s, t].linear_to_zephyr
+            source_to_inner = _zephyr_coordinates_cache[m_s,
+                                                        t].linear_to_zephyr
         elif labels_s == 'coordinate':
             def source_to_inner(q):
                 return q
@@ -554,7 +561,7 @@ def zephyr_torus(
     edge_list: Iterable[tuple[Hashable, Hashable]] | None = None,
 ) -> nx.Graph:
     """Creates a Zephyr graph modified to allow for periodic boundary conditions and translational invariance.
-    
+
     The graph matches the local connectivity properties of a standard Zephyr graph,
     but with modified periodic boundary condition. Tiles of :math:`8t` nodes are arranged
     on an :math:`m` by :math:`m` torus. 
@@ -589,7 +596,7 @@ def zephyr_torus(
     is identical to connectivity for Zephyr graph nodes away from the boundary.
     A tile consists of :math:`8t` nodes, and the torus has :math:`m` by :math:`m` tiles. 
     Tile displacement modulo :math:`m` defines an automorphism.
-    
+
     See :func:`.zephyr_graph` for additional information.
 
     Examples:
@@ -601,16 +608,16 @@ def zephyr_torus(
 
     """
     G = zephyr_graph(m=m, t=t, node_list=None, edge_list=None,
-                         data=True, coordinates=True)
-    
+                     data=True, coordinates=True)
+
     def relabel(u: int, w: int, k: int, j: int, z: int) -> tuple[int, int, int, int, int]:
-        return (u, w%(2*m), k, j, z)
-    
+        return (u, w % (2*m), k, j, z)
+
     # Contract internal couplers spanning the boundary:
     G.add_edges_from([(relabel(*edge[0]), relabel(*edge[1]))
-                      for edge in G.edges() if edge[0][1]==2*m or edge[1][1]==2*m])
-    
-    if m>1:
+                      for edge in G.edges() if edge[0][1] == 2*m or edge[1][1] == 2*m])
+
+    if m > 1:
         # Add boundary spanning external couplers:
         G.add_edges_from([((u, w, k, 1, m - 1), (u, w, k, 0, 0))
                           for u in range(2)
@@ -621,13 +628,13 @@ def zephyr_torus(
                           for w in range(2*m)
                           for k in range(t)
                           for j in range(2)])
-        
+
     # Delete variables contracted at the boundary:
     G.remove_nodes_from([(u, 2*m, k, j, z)
                          for u in range(2) for k in range(t) for j in range(2) for z in range(m)])
-    
+
     _add_compatible_terms(G, node_list, edge_list)
-    
+
     G.graph['boundary_condition'] = 'torus'
 
     return G

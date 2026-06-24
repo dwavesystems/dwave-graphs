@@ -51,6 +51,7 @@ def _add_compatible_terms(
 ) -> None:
     _add_compatible_edges(G, edge_list)
     _add_compatible_nodes(G, node_list)
-    #Check node deletion hasn't caused edge deletion:
+    # Check node deletion hasn't caused edge deletion:
     if edge_list is not None and len(edge_list) != G.number_of_edges():
-        raise ValueError('The edge_list contains nodes absent from the node_list')
+        raise ValueError(
+            'The edge_list contains nodes absent from the node_list')
