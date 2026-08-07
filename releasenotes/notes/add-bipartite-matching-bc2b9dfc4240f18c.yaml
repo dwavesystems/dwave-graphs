@@ -1,0 +1,7 @@
+---
+features:
+  - |
+    Added an internal maximum bipartite matching routine
+    (``dwave.graphs.algorithms.matching.maximum_bipartite_matching``) using the
+    Hopcroft–Karp algorithm (O(E·√V)), with a greedy warm-start that reduces
+    the number of augmenting phases on sparse graphs.
