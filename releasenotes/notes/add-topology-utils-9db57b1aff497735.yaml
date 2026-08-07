@@ -1,0 +1,12 @@
+---
+prelude: >
+    Add object-oriented topology utilities to ``dwave.graphs``, starting with
+    support for the Zephyr topology.
+features:
+  - |
+    Add the ``Zephyr`` topology accessor and its associated classes
+    (``ZephyrNode``, ``ZephyrEdge``, ``ZephyrShape``, ``ZephyrPlaneShift``,
+    ``ZephyrCartesianCoord``, ``ZephyrCoord``), available from ``dwave.graphs``.
+    These support querying node neighbors by edge kind, converting between
+    Cartesian, Zephyr, and linear coordinates, and validating nodes and edges
+    against a topology shape.
