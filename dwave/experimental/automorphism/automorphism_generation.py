@@ -12,31 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
+import random
 from collections import deque
 from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
-import hashlib
 from itertools import chain
-import random
 
 import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
+__all__ = [
+    "array_to_cycle",
+    "edge_orbits",
+    "inv",
+    "mult",
+    "sample_automorphisms",
+    "SchreierContext",
+    "schreier_rep",
+    "vertex_orbits",
+]
+
 
 @dataclass
 class ComponentInfo:
     """Container for per-component data used during automorphism discovery on disjoint graphs."""
+
     u_vector: list
     nodes: NDArray
     best_perm: NDArray
 
+
 class EnterMode(Enum):
     """Controls when the ``_enter()`` function attempts to compose new automorphisms."""
+
     RECURSE = auto()
     RECURSE_ONCE = auto()
     NO_RECURSE = auto()
+
 
 class SchreierContext:
     """This object holds mutable states used throughout the automorphism calculation.
@@ -49,6 +64,7 @@ class SchreierContext:
         graph_coloring: Optional mapping from original vertex label to color label.
             When provided, the initial partition separates vertices by color.
     """
+
     def __init__(
         self,
         graph: nx.Graph,
@@ -203,7 +219,7 @@ class SchreierContext:
             sifting through all positions up to (but not including) the returned
             index.
         """
-        mask = (g != self._identity)
+        mask = g != self._identity
         index = mask.argmax()
         next_diff = 0
 
@@ -219,7 +235,7 @@ class SchreierContext:
                 return next_diff, g
 
             g = self._u_vector_inv[self._u_map[next_diff]][i][g]
-            mask = (g[next_diff:] != self._identity[next_diff:])
+            mask = g[next_diff:] != self._identity[next_diff:]
             index = mask.argmax()
 
         return self._num_nodes, g
@@ -231,7 +247,7 @@ class SchreierContext:
         Combinatorial algorithms: Generation, enumeration, and search.
 
         If an automorphism can't be composed from existing coset representatives
-        it is added as a new coset representative to u_vector. Depending on the 
+        it is added as a new coset representative to u_vector. Depending on the
         setting of ``mode``, ``_enter()`` is called recursively to attempt to
         compose additional coset representatives from the composition between
         the newly-discovered coset representative and existing coset representatives.
@@ -245,7 +261,7 @@ class SchreierContext:
             mode: Specifies if recursive calls to ``enter()`` are performed to attempt
                 to compose new automorphisms. The setting ``EnterMode.RECURSE_ONCE``
                 results in a single call to ``enter()`` per coset representative where
-                no further attempts to compose automorphisms occur. 
+                no further attempts to compose automorphisms occur.
         """
         i, g = self._test_composability(g)
         if i == self._num_nodes:
@@ -309,7 +325,7 @@ class SchreierContext:
         to return anything.
 
         Args:
-            partition: The current partition structure, represented as a list of sets of vertices 
+            partition: The current partition structure, represented as a list of sets of vertices
                 ordered by color.
             trace: A list of the sizes of each partition cell (color class), ordered by color.
             color: An array mapping each vertex to its current color.
@@ -333,7 +349,7 @@ class SchreierContext:
             refine_stack = list(range(num_colors))
         else:
             refine_stack = [color[individualized_vertex]]
-        num_colors = [num_colors] # mutable container so ``_split_up_color()`` can increment it
+        num_colors = [num_colors]  # mutable container so ``_split_up_color()`` can increment it
 
         for v in refine_stack:
             in_refine_stack[v] = 1
@@ -427,7 +443,7 @@ class SchreierContext:
 
         Args:
             color_to_split: The color class to be split.
-            partition: The current partition structure, represented as a list of sets of vertices 
+            partition: The current partition structure, represented as a list of sets of vertices
                 ordered by color.
             color: An array mapping each vertex to its current color.
             trace: A list of the sizes of each partition cell (color class), ordered by color.
@@ -472,7 +488,7 @@ class SchreierContext:
         for v in active_vertices[color_to_split]:
             new_color = degree_to_new_color[color_degree[v]]
             if new_color != color_to_split:
-                partition[color_to_split] = partition[color_to_split] - {v} # must create new obj
+                partition[color_to_split] = partition[color_to_split] - {v}  # must create new obj
                 partition[new_color].add(v)
                 trace[color_to_split] -= 1
                 trace[new_color] += 1
@@ -514,7 +530,7 @@ class SchreierContext:
         If a graph has more than one component, comparisons using adjacency matrices are
         used. This enables isomorphism detection between components, and in turn
         a more efficient approach to generating the full automorphism group, which
-        may contain many automorphisms between isomorphic components. 
+        may contain many automorphisms between isomorphic components.
 
         Kreher and Stinson perform comprehensive pruning by changing the base of
         the left transversals to coincide with the current permutation order up to the
@@ -525,7 +541,7 @@ class SchreierContext:
         becomes prohibitively expensive even more mostly sized graphs, and instead
         the approach taken here is to avoid base changes, but instead to more carefully
         evaluate which coset representatives to use for pruning. This is done by
-        ignoring the automorphisms that do not respect the current partition structure. 
+        ignoring the automorphisms that do not respect the current partition structure.
 
         Args:
             partition: The current partition structure, represented as a list of
@@ -544,7 +560,7 @@ class SchreierContext:
             trace,
             color,
             num_colors,
-            individualized_vertex=individualized_vertex
+            individualized_vertex=individualized_vertex,
         )
 
         if not self._best_perm_exist:
@@ -558,7 +574,7 @@ class SchreierContext:
                 break
 
         compare_result = 2
-        if self._best_perm_exist: # if a leaf node has been reached previously
+        if self._best_perm_exist:  # if a leaf node has been reached previously
 
             if self._compare_adj:
                 perm_candidate = list(chain.from_iterable(p for p in partition if p is not None))
@@ -569,7 +585,7 @@ class SchreierContext:
             if compare_result == 0:
                 return
 
-        if first_split == self._num_nodes - 1: # leaf node reached
+        if first_split == self._num_nodes - 1:  # leaf node reached
             self._leaf_nodes += 1
 
             if not self._best_perm_exist:
@@ -598,8 +614,8 @@ class SchreierContext:
             vertex = next(iter(candidates))
             updated_partition[first_split] = remaining_in_block - {vertex}
             updated_partition[num_colors] = {vertex}
-            individualized_partition = list(updated_partition) # copy outer list
-            color[vertex] = num_colors # updated individualized cell
+            individualized_partition = list(updated_partition)  # copy outer list
+            color[vertex] = num_colors  # updated individualized cell
             trace_copy = np.array(trace)
             color_copy = np.array(color)
 
@@ -608,7 +624,7 @@ class SchreierContext:
                 trace_copy,
                 color_copy,
                 num_colors + 1,
-                individualized_vertex=vertex
+                individualized_vertex=vertex,
             )
 
             color[vertex] = first_split
@@ -616,7 +632,7 @@ class SchreierContext:
 
             # prune the search tree using automorphisms
             for stab_index, u_index in self._u_map.items():
-                if stab_index > vertex: # these automorphisms map vertex to itself
+                if stab_index > vertex:  # these automorphisms map vertex to itself
                     continue
 
                 for g in self._u_vector[u_index]:
@@ -712,7 +728,7 @@ class SchreierContext:
         non-trivial initial vertex coloring.
 
         Returns:
-            partition: The initial partition structure, represented as a list of sets of vertices 
+            partition: The initial partition structure, represented as a list of sets of vertices
                 ordered by color.
             trace: A list of the sizes of each partition cell (color class), ordered by color.
             color: An array mapping each vertex to its current color.
@@ -954,8 +970,8 @@ def mult(alpha: NDArray[np.intp], beta: NDArray[np.intp]) -> NDArray[np.intp]:
         >>> import numpy as np
         >>> from dwave.experimental.automorphism import mult
         ...
-        >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
-        >>> beta  = np.array([1,2,0], dtype=np.intp) # (0,1,2): 0->1, 1->2, 2->0
+        >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
+        >>> beta  = np.array([1,2,0], dtype=np.intp)  # (0,1,2): 0->1, 1->2, 2->0
         >>> mult(alpha, beta)
         array([0, 1, 2])
     """
@@ -976,7 +992,7 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
         >>> import numpy as np
         >>> from dwave.experimental.automorphism import inv
         ...
-        >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
+        >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
         >>> inv(3, alpha)
         array([1, 2, 0])
     """
@@ -1021,8 +1037,9 @@ def schreier_rep(
         graph_coloring: Optional mapping from original vertex label to color label.
     """
     if nx.number_connected_components(graph) == 1:
-        ctx = SchreierContext(graph, num_samples=num_samples, seed=seed,
-                              graph_coloring=graph_coloring)
+        ctx = SchreierContext(
+            graph, num_samples=num_samples, seed=seed, graph_coloring=graph_coloring
+        )
         initial_partition, trace, color, num_colors = ctx._initial_partition()
 
         ctx._canon(initial_partition, trace, color, num_colors)
@@ -1065,7 +1082,7 @@ def schreier_rep(
         initial_partition, trace, color, num_colors = ctx_comp._initial_partition()
         ctx_comp._canon(initial_partition, trace, color, num_colors)
 
-        ctx._nodes_reached += ctx_comp.nodes_reached # update the global search tree statistics
+        ctx._nodes_reached += ctx_comp.nodes_reached  # update the global search tree statistics
         ctx._leaf_nodes += ctx_comp.leaf_nodes
 
         unique_components.setdefault(ctx_comp._certificate(), []).append(
@@ -1099,6 +1116,7 @@ def schreier_rep(
 
     return ctx
 
+
 def array_to_cycle(
     array: NDArray[np.intp],
     index_to_node: Mapping[int, Hashable] | None = None,
@@ -1120,7 +1138,7 @@ def array_to_cycle(
         >>> import numpy as np
         >>> from dwave.experimental.automorphism import array_to_cycle
         ...
-        >>> alpha = np.array([2,0,1], dtype=np.intp) # (0,2,1): 0->2, 1->0, 2->1
+        >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
         >>> array_to_cycle(alpha)
         '(0,2,1)'
         >>> array_to_cycle(np.array([2,0,1]), index_to_node={0: 5, 1: 7, 2: 9})
