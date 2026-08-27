@@ -1,0 +1,6 @@
+---
+features:
+  - |
+    Add graph automorphism algorithms migrated from ``dwave-experimental``,
+    including functions for computing Schreier representations, sampling
+    automorphisms, and determining vertex and edge orbits.
