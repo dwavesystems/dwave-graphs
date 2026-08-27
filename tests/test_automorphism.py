@@ -15,7 +15,7 @@
 import random
 import unittest
 
-import dwave_networkx as dnx
+from dwave.graphs import chimera_graph, zephyr_graph, pegasus_graph
 import networkx as nx
 import numpy as np
 
@@ -46,7 +46,7 @@ class Automorphisms(unittest.TestCase):
     def test_chimera(self):
         """Check the number of automorphisms, vertex orbits, and edge orbits of a chimera-1 graph,
         as well as the number of leaf nodes and total nodes in the search tree."""
-        graph = dnx.chimera_graph(1)
+        graph = chimera_graph(1)
         result = schreier_rep(graph)
 
         self.assertEqual(result.num_automorphisms, 1152)
@@ -65,13 +65,13 @@ class Automorphisms(unittest.TestCase):
 
     def test_zepyr(self):
         """Check the number of automorphisms of a zephyr-10 graph with no defects"""
-        graph = dnx.zephyr_graph(4)
+        graph = zephyr_graph(4)
         result = schreier_rep(graph)  # should run in ~ 0.7 s.
         self.assertEqual(result.num_automorphisms, 55833176636675051023761408)
 
     def test_zephyr_defect(self):
         """Check the number of automorphisms of a zephyr graph with defects"""
-        graph = dnx.zephyr_graph(3)
+        graph = zephyr_graph(3)
         defect_fraction = 0.04
         num_delete = int(defect_fraction * graph.number_of_nodes())
         random.seed(42)
@@ -84,7 +84,7 @@ class Automorphisms(unittest.TestCase):
 
     def test_pegasus(self):
         """Check the number of automorphisms, vertex orbits, and edge orbits of a chimera-1 graph"""
-        graph = dnx.pegasus_graph(2)
+        graph = pegasus_graph(2)
         result = schreier_rep(graph)
 
         self.assertEqual(result.num_automorphisms, 2097152)
