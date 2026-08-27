@@ -24,3 +24,4 @@ from dwave.graphs.algorithms.max_cut import *
 from dwave.graphs.algorithms.markov import *
 from dwave.graphs.algorithms.tsp import *
 from dwave.graphs.algorithms.partition import *
+from dwave.graphs.algorithms.automorphism import *

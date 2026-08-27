@@ -19,7 +19,7 @@ from dwave.graphs import chimera_graph, zephyr_graph, pegasus_graph
 import networkx as nx
 import numpy as np
 
-from dwave.experimental.automorphism import (
+from dwave.graphs import (
     schreier_rep,
     sample_automorphisms,
     vertex_orbits,
