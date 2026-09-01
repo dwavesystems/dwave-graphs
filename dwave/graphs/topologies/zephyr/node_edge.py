@@ -134,12 +134,12 @@ class ZephyrNode(
             check_node_valid=check_node_valid,
         )
 
-    def _set_shape(
+    def _find_shape(
         self,
         shape: ZephyrShape | tuple[int | _Quotient | _Infinite, ...] | None,
         check_shape_valid: bool,
     ) -> ZephyrShape:
-        """Sets the shape of the Zephyr graph the node belongs to.
+        """Finds the shape of the Zephyr graph the node belongs to.
 
         Args:
             shape: Shape of the Zephyr graph the node belongs to.
@@ -149,7 +149,7 @@ class ZephyrNode(
             ValueError: If the shape is not a valid Zephyr shape.
 
         Returns:
-            ZephyrShape: Shape of the Zephyr graph the node belongs to.
+            Shape of the Zephyr graph the node belongs to.
         """
         if shape is None:
             return ZephyrShape()
@@ -158,7 +158,7 @@ class ZephyrNode(
         except (ValueError, TypeError) as e:
             raise ValueError(f"{shape} cannot be converted to :class:`ZephyrShape`") from e
 
-    def _set_coord_kind(
+    def _find_coord_kind(
         self,
         coord: (
             ZephyrCartesianCoord
@@ -170,14 +170,14 @@ class ZephyrNode(
         ),
         coord_kind: CoordKind | None,
     ) -> CoordKind:
-        """Gives the coordinate kind that the node is represented with.
+        """Finds the coordinate kind that the node is represented with.
 
         Args:
             coord: Coordinate of the node.
             coord_kind:The coordinate kind to represent the node with.
 
         Returns:
-            CoordKind: The coordinate kind that the node is represented with.
+            The coordinate kind that the node is represented with.
         """
         if coord_kind is not None:
             return coord_kind
@@ -206,8 +206,7 @@ class ZephyrNode(
                 it cannot be converted to a :class:`ZephyrCoord`.
 
         Returns:
-            ZephyrCoord | ZephyrCartesianCoord:
-                The Zephyr coordinate the coordinate corresponds to.
+            The Zephyr coordinate the coordinate corresponds to.
         """
         if len(coord) == 2:
             coord = (coord[0], coord[1], _Quotient.QUOTIENT)
@@ -224,7 +223,7 @@ class ZephyrNode(
         except (ValueError, TypeError):
             raise ValueError(f"{coord} cannot be converted to :class:`ZephyrCoord`.")
 
-    def _set_ccoord(
+    def _find_ccoord(
         self,
         coord: (
             ZephyrCartesianCoord
@@ -236,7 +235,7 @@ class ZephyrNode(
         ),
         check_coord_valid: bool,
     ) -> ZephyrCartesianCoord:
-        """Gives the Cartesian coordinate of the node as a canonical coordinate
+        """Finds the Cartesian coordinate of the node as a canonical coordinate
             to use in class methods' computations.
 
         Args:
@@ -244,7 +243,7 @@ class ZephyrNode(
             check_coord_valid: Flag to check whether the coordinate is valid in Zephyr.
 
         Returns:
-            Coord: The Cartesian coordinate of the node.
+            The Cartesian coordinate of the node.
         """
         if isinstance(coord, tuple):
             coord = self._tuple_to_coord(coord)
@@ -290,7 +289,7 @@ class ZephyrNode(
                 -``zcoord`` if :py:attr:`self.coord_kind` is ``CoordKind.TOPOLOGY``.
                 - Defaults to ``None``.
         Yields:
-            ZephyrNode: Internal neighbors of the node when restricted by ``where``.
+            Internal neighbors of the node when restricted by ``where``.
         """
         x, y, _ = self._ccoord
         k_vals = (
@@ -324,7 +323,7 @@ class ZephyrNode(
                 -``zcoord`` if :py:attr:`self.coord_kind` is ``CoordKind.TOPOLOGY``.
                 - Defaults to ``None``.
         Yields:
-            ZephyrNode: External neighbors of node when restricted by ``where``.
+            External neighbors of node when restricted by ``where``.
         """
         x, y, k = self._ccoord
         changing_index = 1 if x % 2 == 0 else 0
@@ -356,7 +355,7 @@ class ZephyrNode(
                 -``zcoord`` if :py:attr:`self.coord_kind` is ``CoordKind.TOPOLOGY``.
                 - Defaults to ``None``.
         Yields:
-            ZephyrNode: Odd neighbors of node when restricted by ``where``.
+            Odd neighbors of node when restricted by ``where``.
         """
         x, y, k = self._ccoord
         changing_index = 1 if x % 2 == 0 else 0
@@ -386,7 +385,7 @@ class ZephyrNode(
             ValueError: If the shift cannot be converted to a :class:`ZephyrPlaneShift` object.
 
         Returns:
-            ZephyrNode: The shifted node.
+            The shifted node.
         """
         if not isinstance(shift, ZephyrPlaneShift):
             try:
@@ -414,7 +413,7 @@ class ZephyrNode(
                 that moves the node to the other node.
 
         Returns:
-            ZephyrPlaneShift: The displacement that when added to the node moves it to the other node.
+            The displacement that when added to the node moves it to the other node.
         """
         x_shift: int = self._ccoord.x - other._ccoord.x
         y_shift: int = self._ccoord.y - other._ccoord.y

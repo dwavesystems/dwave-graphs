@@ -22,7 +22,7 @@ from dwave.graphs.topologies.zephyr import ZephyrCartesianCoord, ZephyrEdge, Zep
 
 class TestEdge(unittest.TestCase):
     def test_canonical_order(self) -> None:
-        # x > y forces the (y, x) swap branch in Edge._set_edge.
+        # x > y forces the (y, x) swap branch in Edge._find_edge.
         hi = ZephyrNode((0, 3))
         lo = ZephyrNode((0, 1))
         e = ZephyrEdge(hi, lo)

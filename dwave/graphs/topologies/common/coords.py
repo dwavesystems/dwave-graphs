@@ -65,7 +65,7 @@ class Coord(ABC):
             shape: The shape to check the consistency of the coordinate with.
 
         Returns:
-            bool: Whether the coordinate is consistent with the shape.
+            Whether the coordinate is consistent with the shape.
         """
 
     @abstractmethod

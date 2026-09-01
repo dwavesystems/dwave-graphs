@@ -76,10 +76,10 @@ class Edge:
     """
 
     def __init__(self, x: Hashable, y: Hashable) -> None:
-        self._edge = self._set_edge(x, y)
+        self._edge = self._find_edge(x, y)
 
-    def _set_edge(self, x: Hashable, y: Hashable) -> tuple[Hashable, Hashable]:
-        """Returns a canonical representation of the edge between x, y.
+    def _find_edge(self, x: Hashable, y: Hashable) -> tuple[Hashable, Hashable]:
+        """Finds a canonical representation of the edge between x, y.
 
         Args:
         x: One endpoint of edge.
@@ -170,7 +170,7 @@ class TopologyEdge(ABC, Edge):
             y: Another endpoint of edge.
 
         Returns:
-            EdgeKind: The kind of edge in the topology.
+            The kind of edge in the topology.
         """
         for kind in self.associated_topology_node.supported_edgekinds():
             if x.is_neighbor(y, nbr_kind=kind):
@@ -226,21 +226,21 @@ class TopologyNode(ABC):
         coord_kind: CoordKind | None = None,
         check_node_valid: bool = True,
     ) -> None:
-        self._shape = self._set_shape(shape=shape, check_shape_valid=check_node_valid)
+        self._shape = self._find_shape(shape=shape, check_shape_valid=check_node_valid)
 
-        self._coord_kind = self._set_coord_kind(
+        self._coord_kind = self._find_coord_kind(
             coord=coord,
             coord_kind=coord_kind,
         )
 
-        self._ccoord = self._set_ccoord(coord=coord, check_coord_valid=check_node_valid)
+        self._ccoord = self._find_ccoord(coord=coord, check_coord_valid=check_node_valid)
 
     @classmethod
     def supported_edgekinds(cls) -> dict[EdgeKind, type]:
         """Gives the edge kinds incident with the nodes of this class.
 
         Returns:
-            dict[EdgeKind, type]: A dictionary whose
+            A dictionary whose
                 - keys are edge kinds incident with a typical node.
                 - Values are subclasses of :class:`NeighborContributor`
                     whose associated_edgekind is the given key.
@@ -254,12 +254,12 @@ class TopologyNode(ABC):
         return edgekind_cls_map
 
     @abstractmethod
-    def _set_shape(
+    def _find_shape(
         self,
         shape: TopologyShape | tuple[int | _Quotient | _Infinite, ...] | None,
         check_shape_valid: bool,
     ) -> TopologyShape:
-        """Sets the shape of the topology graph the node belongs to.
+        """Finds the shape of the topology graph the node belongs to.
 
         Args:
             shape: Shape of the topology graph the node belongs to.
@@ -271,35 +271,35 @@ class TopologyNode(ABC):
         """
 
     @abstractmethod
-    def _set_coord_kind(
+    def _find_coord_kind(
         self,
         coord: Coord | tuple[int | _Quotient, ...],
         coord_kind: CoordKind | None,
     ) -> CoordKind:
-        """Gives the coordinate kind that the node is represented with.
+        """Finds the coordinate kind that the node is represented with.
 
         Args:
             coord: Coordinate of the node.
             coord_kind: The coordinate kind to represent the node with.
 
         Returns:
-            CoordKind: The coordinate kind that the node is represented with.
+            The coordinate kind that the node is represented with.
         """
 
     @abstractmethod
-    def _set_ccoord(
+    def _find_ccoord(
         self,
         coord: Coord | tuple[int | _Quotient, ...],
         check_coord_valid: bool,
     ) -> Coord:
-        """Gives the canonical coordinate of the node to use in class methods' computations.
+        """Finds the canonical coordinate of the node to use in class methods' computations.
 
         Args:
             coord: Coordinate of the node.
             check_coord_valid: Flag to check whether the coordinate is valid in the topology.
 
         Returns:
-            Coord: The canonical coordinate of the node.
+            The canonical coordinate of the node.
         """
 
     @property
@@ -313,7 +313,7 @@ class TopologyNode(ABC):
         """The topology coordinate of the node.
 
         Returns:
-            Coord: The topology coordinate of the node.
+            The topology coordinate of the node.
         """
 
     @property
@@ -357,7 +357,7 @@ class TopologyNode(ABC):
             shape: The non-quotient shape to expand the node to.
 
         Returns:
-            list[TopologyNode]: The expansion of the node into non-quotient.
+            The expansion of the node into non-quotient.
         """
         non_quo_coords = self._ccoord.to_non_quotient(shape=shape)
         return [
@@ -388,7 +388,7 @@ class TopologyNode(ABC):
             other: Another topology node.
 
         Returns:
-            EdgeKind: The edge kind between the two nodes in perfect yield topology.
+            The edge kind between the two nodes in perfect yield topology.
         """
         if type(self) is not type(other):
             return NotImplemented
@@ -413,7 +413,7 @@ class TopologyNode(ABC):
             where: A coordinate filter. Defaults to ``None``.
 
         Yields:
-            TopologyNode: Neighbors of the node when restricted by ``nbr_kind`` and ``where``.
+            Neighbors of the node when restricted by ``nbr_kind`` and ``where``.
         """
 
         edgekind_cls_map = self.supported_edgekinds()
@@ -452,8 +452,8 @@ class TopologyNode(ABC):
                 A coordinate filter. Defaults to ``None``.
 
         Returns:
-            bool: Whether ``other`` is a neighbor of the node when
-                restricted by ``nbr_kind`` and ``where``.
+            Whether ``other`` is a neighbor of the node when
+            restricted by ``nbr_kind`` and ``where``.
         """
         return other in self.neighbors(nbr_kind=nbr_kind, where=where)
 
@@ -472,7 +472,7 @@ class TopologyNode(ABC):
             where: A coordinate filter. Defaults to ``None``.
 
         Returns:
-            list[TopologyEdge]: List of edges incident with self when restricted by ``nbr_kind`` and ``where``.
+            List of edges incident with self when restricted by ``nbr_kind`` and ``where``.
         """
         for v in self.neighbors(nbr_kind=nbr_kind, where=where):
             yield self.associated_topology_edge(self, v)
@@ -492,7 +492,7 @@ class TopologyNode(ABC):
                 A coordinate filter. Defaults to ``None``.
 
         Returns:
-            int: degree of the node when restricted by ``nbr_kind`` and ``where``.
+            Degree of the node when restricted by ``nbr_kind`` and ``where``.
         """
         return len(list(self.neighbors(nbr_kind=nbr_kind, where=where)))
 
@@ -504,7 +504,7 @@ class TopologyNode(ABC):
             shift: Shift to be applied to the node.
 
         Returns:
-            TopologyNode: The shifted node.
+            The shifted node.
         """
 
     @abstractmethod
@@ -515,7 +515,7 @@ class TopologyNode(ABC):
             other: The node to find the displacement with.
 
         Returns:
-            TopologyPlaneShift: The displacement whose application to the node moves it to the other node.
+            The displacement whose application to the node moves it to the other node.
         """
 
     def __eq__(self, other: object) -> bool:
@@ -566,7 +566,7 @@ class InternalNeighborsMixin(NeighborContributorMixin):
             where: A coordinate filter. Defaults to ``None``.
 
         Yields:
-            TopologyNode: Internal neighbors of the node when restricted by ``where``.
+            Internal neighbors of the node when restricted by ``where``.
         """
 
     def is_internal_neighbor(
@@ -605,7 +605,7 @@ class ExternalNeighborsMixin(NeighborContributorMixin):
             where: A coordinate filter. Defaults to ``None``.
 
         Yields:
-            TopologyNode: External neighbors of the node when restricted by ``where``.
+            External neighbors of the node when restricted by ``where``.
         """
 
     def is_external_neighbor(
@@ -622,8 +622,8 @@ class ExternalNeighborsMixin(NeighborContributorMixin):
             where: A coordinate filter. Defaults to ``None``.
 
         Returns:
-            bool: Whether the other node is an external neighbor
-                of the node when restricted by ``where``.
+            Whether the other node is an external neighbor
+            of the node when restricted by ``where``.
         """
         return other in self.external_neighbors(where=where)
 
@@ -644,7 +644,7 @@ class OddNeighborsMixin(NeighborContributorMixin):
             where : A coordinate filter. Defaults to ``None``.
 
         Yields:
-            TopologyNode: Odd neighbors of the node when restricted by ``where``.
+            Odd neighbors of the node when restricted by ``where``.
         """
 
     def is_odd_neighbor(
@@ -661,7 +661,7 @@ class OddNeighborsMixin(NeighborContributorMixin):
             where: A coordinate filter. Defaults to ``None``.
 
         Returns:
-            bool: Whether the other node is an odd neighbor
-                of the node when restricted by ``where``.
+            Whether the other node is an odd neighbor
+            of the node when restricted by ``where``.
         """
         return other in self.odd_neighbors(where=where)

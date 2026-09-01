@@ -42,7 +42,7 @@ class Topology(ABC):
                 Defaults to ``None``.
 
         Returns:
-            set[TopologyNode]: The nodes of the topology graph with the given
+            The nodes of the topology graph with the given
             shape and coordinate kind.
         """
 

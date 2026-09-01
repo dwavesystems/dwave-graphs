@@ -76,7 +76,7 @@ class TopologyPlaneShift(ABC):
             scale: The scale for left-multiplying the displacement with.
 
         Returns:
-            TopologyPlaneShift: The result of left-multiplying the displacement by ``scale``.
+            The result of left-multiplying the displacement by ``scale``.
         """
         return self._construct(scale * self.x, scale * self.y)
 
@@ -87,7 +87,7 @@ class TopologyPlaneShift(ABC):
             scale: The scale for right-multiplying the displacement with.
 
         Returns:
-            TopologyPlaneShift: The result of right-multiplying the displacement by ``scale``.
+            The result of right-multiplying the displacement by ``scale``.
         """
         return self * scale
 
@@ -99,7 +99,7 @@ class TopologyPlaneShift(ABC):
             other: The displacement to be added.
 
         Returns:
-            TopologyPlaneShift: The displacement in Cartesian Coord by self followed by other.
+            The displacement in Cartesian Coord by self followed by other.
         """
         return self._construct(self.x + other.x, self.y + other.y)
 

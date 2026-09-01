@@ -330,7 +330,7 @@ class ZephyrCartesianCoord(Coord):
             shape: The shape to check the consistency of the coordinate with.
 
         Returns:
-            bool: Whether the coordinate is consistent with the shape.
+            Whether the coordinate is consistent with the shape.
         """
         # check x, y value of coord is consistent with m
         shape_m, shape_t = shape
@@ -387,7 +387,7 @@ class ZephyrCartesianCoord(Coord):
             ValueError: If the coordinate is not consistent with the shape.
 
         Returns:
-            list[ZephyrCartesianCoord]: The expansion of the coordinate into non-quotient.
+            The expansion of the coordinate into non-quotient.
         """
 
         if shape.is_quotient():
@@ -412,7 +412,7 @@ class ZephyrCartesianCoord(Coord):
             coord_kind: The kind of coordinate to covert into.
 
         Returns:
-            ZephyrCartesianCoord | ZephyrCoord: The converted coordinate.
+            The converted coordinate.
         """
         if coord_kind is CoordKind.TOPOLOGY:
             u, w, k, j, z = zephyr_coordinates.cartesian_to_zephyr(self)
@@ -507,7 +507,7 @@ class ZephyrCoord(Coord):
             shape: The shape to check the consistency of the coordinate with.
 
         Returns:
-            bool: Whether the coordinate is consistent with the shape.
+            Whether the coordinate is consistent with the shape.
         """
         # w, z value of coord is consistent with grid size
         shape_m, shape_t = shape
@@ -548,7 +548,7 @@ class ZephyrCoord(Coord):
             ValueError: If the coordinate is not consistent with the shape.
 
         Returns:
-            list[ZephyrCoord]: The expansion of the coordinate into non-quotient.
+            The expansion of the coordinate into non-quotient.
         """
         if shape.is_quotient():
             raise ValueError(f"Expected shape to be non-quotient, got {shape}")
@@ -577,7 +577,7 @@ class ZephyrCoord(Coord):
             coord_kind: The kind of coordinate to covert into.
 
         Returns:
-            ZephyrCartesianCoord | ZephyrCoord: The converted coordinate.
+            The converted coordinate.
         """
         if coord_kind is CoordKind.CARTESIAN:
             x, y, k = zephyr_coordinates.zephyr_to_cartesian(self)

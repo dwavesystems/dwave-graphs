@@ -89,7 +89,7 @@ class TopologyShape(ABC):
         """Converts the shape to its corresponding quotient shape.
 
         Returns:
-            TopologyShape: The shape converted to its corresponding quotient shape.
+            The shape converted to its corresponding quotient shape.
         """
 
     @abstractmethod
@@ -97,7 +97,7 @@ class TopologyShape(ABC):
         """Tells whether the shape represents a quotient shape.
 
         Returns:
-            bool: Whether the shape is quotient.
+            Whether the shape is quotient.
         """
 
     @abstractmethod
@@ -105,7 +105,7 @@ class TopologyShape(ABC):
         """Converts the shape to its corresponding infinite grid size shape.
 
         Returns:
-            TopologyShape: The shape converted to its corresponding infinite grid size shape.
+            The shape converted to its corresponding infinite grid size shape.
         """
 
     @abstractmethod
@@ -113,7 +113,7 @@ class TopologyShape(ABC):
         """Tells whether the shape represents a shape with infinite grid size.
 
         Returns:
-            bool: Whether the shape represents a shape with infinite grid size.
+            Whether the shape represents a shape with infinite grid size.
         """
 
     @abstractmethod
