@@ -1,4 +1,4 @@
-# Copyright 2026 D-Wave
+# Copyright 2026 D-Wave Systems Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -12,9 +12,9 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from dwave.graphs.topologies.zephyr.graphs import *
-from dwave.graphs.topologies.zephyr.coords import *
-from dwave.graphs.topologies.zephyr.node_edge import *
-from dwave.graphs.topologies.zephyr.planeshift import *
-from dwave.graphs.topologies.zephyr.shape import *
-from dwave.graphs.topologies.zephyr.zephyr import *
+from dwave.graphs.topologies.common.common import _add_compatible_edges, _add_compatible_nodes, _add_compatible_terms
+from dwave.graphs.topologies.common.coords import *
+from dwave.graphs.topologies.common.node_edge import *
+from dwave.graphs.topologies.common.planeshift import *
+from dwave.graphs.topologies.common.shape import *
+from dwave.graphs.topologies.common.topology import *
