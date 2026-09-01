@@ -66,6 +66,6 @@ class Topology(ABC):
                 Defaults to ``None``.
 
         Returns:
-            set[TopologyEdge]: The edges of the topology graph with the given
-                shape, coordinate and edge kind.
+            The edges of the topology graph with the given
+            shape, coordinate and edge kind.
         """

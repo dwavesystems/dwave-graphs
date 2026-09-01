@@ -91,7 +91,7 @@ class Coord(ABC):
             shape: The non-quotient shape to expand the coordinate to.
 
         Returns:
-            list[Coord]: The expansion of the coordinate into non-quotient.
+            The expansion of the coordinate into non-quotient.
         """
 
     @abstractmethod
@@ -99,10 +99,10 @@ class Coord(ABC):
         """Converts the coordinate to other kinds of coordinate in the same topology.
 
         Args:
-            coord_kind (CoordKind): The coordinate kind to convert the coordinate to.
+            coord_kind: The coordinate kind to convert the coordinate to.
 
         Returns:
-            Coord: The converted coordinate.
+            The converted coordinate.
         """
 
     @abstractmethod

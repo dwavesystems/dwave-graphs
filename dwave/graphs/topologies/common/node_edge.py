@@ -86,7 +86,7 @@ class Edge:
         y: Another endpoint of edge.
 
         Returns:
-            tuple[Hashable, Hashable]: A canonical representation of the edge between x, y.
+            A canonical representation of the edge between x, y.
         """
         return (x, y) if x < y else (y, x)
 
@@ -102,7 +102,7 @@ class Edge:
         return self._edge == other._edge
 
     def __str__(self) -> str:
-        return "(" + str(self._edge[0]) + ", " + str(self._edge[1]) + ")"
+        return f"({', '.join(map(str, self._edge))})"
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}{self._edge}"
@@ -198,7 +198,7 @@ class TopologyNode(ABC):
     (the name of the topology it belongs to, e.g. ``"zephyr"``).
 
     ..note:: For a subclass, the methods that have to do with the edges
-        incident with a node, such as neighbors, degree, ... require that
+        incident with a node, such as neighbors, degree, etc., require that
         the subclass is also a subclass of a subclass of :class:`NeighborContributorMixin`.
 
     Args:
@@ -267,7 +267,7 @@ class TopologyNode(ABC):
                 Flag to check whether the shape is a valid shape for the topology.
 
         Returns:
-            TopologyShape: Shape of the topology graph the node belongs to.
+            Shape of the topology graph the node belongs to.
         """
 
     @abstractmethod
@@ -329,11 +329,11 @@ class TopologyNode(ABC):
     @property
     def direction(self) -> int:
         """The direction of the qubit the node is representing."""
-        _node_kind = self.node_kind
-        if _node_kind is NodeKind.VERTICAL:
-            return 0
-        elif _node_kind is NodeKind.HORIZONTAL:
-            return 1
+        match self.node_kind:
+            case NodeKind.VERTICAL:
+                return 0
+            case NodeKind.HORIZONTAL:
+                return 1
 
         raise AssertionError(f"Unhandled NodeKind value: {_node_kind}")
 
@@ -583,8 +583,8 @@ class InternalNeighborsMixin(NeighborContributorMixin):
             where: A coordinate filter. Defaults to ``None``.
 
         Returns:
-            bool: Whether the other node is an internal neighbor
-                of the node when restricted by ``where``.
+            Whether the other node is an internal neighbor
+            of the node when restricted by ``where``.
         """
         return other in self.internal_neighbors(where=where)
 
