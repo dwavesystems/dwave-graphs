@@ -19,12 +19,11 @@ from dwave.graphs import chimera_graph, zephyr_graph, pegasus_graph
 import networkx as nx
 import numpy as np
 
-from dwave.graphs import (
+from dwave.graphs.algorithms.automorphism import (
     schreier_rep,
     sample_automorphisms,
     vertex_orbits,
     edge_orbits,
-    array_to_cycle,
     SchreierContext
 )
 
@@ -361,21 +360,6 @@ class Automorphisms(unittest.TestCase):
             b'\xf2\xd6\x9b@\xdd\xc4\x93\x03\xcc\xc2\xb8\x16\x03\x18['
         )
         self.assertEqual(result._certificate(), expected_cert)
-
-    def test_array_to_cycle(self):
-        """Test the functionality of the ``array_to_cycle()`` function, including the optional
-        labelling map."""
-        g = np.array([0, 3, 6, 1, 4, 7, 2, 5, 8])
-        self.assertEqual(array_to_cycle(g), '(0)(1,3)(2,6)(4)(5,7)(8)')
-        index_to_node = {0: 7, 1: 3, 2: 22, 3: 4, 4: 15, 5: 11, 6: 99, 7: 'b', 8: 44}
-        self.assertEqual(array_to_cycle(g, index_to_node), '(7)(3,4)(22,99)(15)(11,b)(44)')
-
-    def test_array_to_cycle_missing_keys(self):
-        """Test when the optional labelling map for ``array_to_cycle()`` is missing a key."""
-        g = np.array([0, 3, 6, 1, 4, 7, 2, 5, 8])
-        index_to_node = {0: 7, 1: 3, 2: 22, 3: 4, 4: 15, 5: 11, 6: 99, 7: 'b'}
-        with self.assertRaises(ValueError):
-            array_to_cycle(g, index_to_node)
 
     def test_string_labels(self):
         """Test the orbits returned from a graph with nodes labelled by strings."""

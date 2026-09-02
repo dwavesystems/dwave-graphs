@@ -24,12 +24,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 __all__ = [
-    "array_to_cycle",
     "edge_orbits",
-    "inv",
-    "mult",
     "sample_automorphisms",
-    "SchreierContext",
     "schreier_rep",
     "vertex_orbits",
 ]
@@ -171,8 +167,7 @@ class SchreierContext:
         """Number of automorphisms implied by u_vector."""
         if self._u_vector:
             return int(np.prod([len(u_i) + 1 for u_i in self._u_vector], dtype=object))
-        else:
-            return 1
+        return 1
 
     @property
     def vertex_orbits(self) -> list[list[int]]:
@@ -272,14 +267,16 @@ class SchreierContext:
             self._u_vector_inv.append([])
 
         self._u_vector[self._u_map[i]].append(g)
-        self._u_vector_inv[self._u_map[i]].append(inv(self._num_nodes, g))
+        g_inv = np.empty(self._num_nodes, dtype=np.intp)
+        g_inv[g] = self._identity
+        self._u_vector_inv[self._u_map[i]].append(g_inv)
 
         if mode is EnterMode.NO_RECURSE:
             return
 
         for u_i in self._u_vector:
             for h in u_i:
-                f = mult(g, h)
+                f = g[h]  # g ∘ h
                 if mode is EnterMode.RECURSE_ONCE:
                     self._enter(f, mode=EnterMode.NO_RECURSE)
                 else:
@@ -783,7 +780,7 @@ def vertex_orbits(
 
     Example:
         >>> import numpy as np
-        >>> from dwave.graphs import vertex_orbits
+        >>> from dwave.graphs.algorithms.automorphism import vertex_orbits
         ...
         >>> u_vector = [
         ...     [np.array([0, 1, 4, 3, 2, 6, 5, 7])],
@@ -854,7 +851,7 @@ def edge_orbits(
 
     Example:
         >>> import numpy as np
-        >>> from dwave.graphs import edge_orbits
+        >>> from dwave.graphs.algorithms.automorphism import edge_orbits
         ...
         >>> u_vector = [
         ...     [np.array([0, 1, 4, 3, 2, 6, 5, 7])],
@@ -943,7 +940,7 @@ def sample_automorphisms(
 
     Example:
         >>> import networkx as nx
-        >>> from dwave.graphs import schreier_rep, sample_automorphisms
+        >>> from dwave.graphs.algorithms.automorphism import schreier_rep, sample_automorphisms
         ...
         >>> graph = nx.cycle_graph(8)
         >>> result = schreier_rep(graph)
@@ -979,56 +976,11 @@ def sample_automorphisms(
         for i, u_i in enumerate(u_vector):
             if sample_indices[i] >= 0:
                 g = u_i[sample_indices[i]]
-                g_product = mult(g, g_product)
+                g_product = g[g_product]  # g ∘ g_product
 
         sampled_automorphisms.append(g_product)
 
     return sampled_automorphisms
-
-
-def mult(alpha: NDArray[np.intp], beta: NDArray[np.intp]) -> NDArray[np.intp]:
-    """Compose two permutations in one-line notation, alpha after beta.
-
-    Args:
-        alpha: A permutation represented as a list of integers in one-line notation.
-        beta: Another permutation of the same length.
-
-    Returns:
-        The composition alpha ∘ beta in one-line notation.
-
-    Example:
-        >>> import numpy as np
-        >>> from dwave.graphs import mult
-        ...
-        >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
-        >>> beta  = np.array([1,2,0], dtype=np.intp)  # (0,1,2): 0->1, 1->2, 2->0
-        >>> mult(alpha, beta)
-        array([0, 1, 2])
-    """
-    return alpha[beta]
-
-
-def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
-    """Calculate the inverse of a permutation in one-line notation.
-
-    Args:
-        n: Length of permutation alpha.
-        alpha: A permutation represented as a list of integers in one-line notation.
-
-    Returns:
-        The inverse of alpha in one-line notation.
-
-    Example:
-        >>> import numpy as np
-        >>> from dwave.graphs import inv
-        ...
-        >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
-        >>> inv(3, alpha)
-        array([1, 2, 0])
-    """
-    alpha_inv = np.empty(n, dtype=np.intp)
-    alpha_inv[alpha] = np.arange(n, dtype=alpha_inv.dtype)
-    return alpha_inv
 
 
 def schreier_rep(
@@ -1131,57 +1083,3 @@ def schreier_rep(
             ctx._enter(u_global, mode=EnterMode.RECURSE_ONCE)
 
     return ctx
-
-
-def array_to_cycle(
-    array: NDArray[np.intp],
-    index_to_node: Mapping[int, Hashable] | None = None,
-) -> str:
-    """Convert an array in one-line notation to a string in cycle notation.
-
-    Based on Algorithm 6.4 from Kreher, D. L., & Stinson, D. R. (1999).
-    Combinatorial algorithms: Generation, enumeration, and search.
-
-    Args:
-        array: The permutation in one-line notation.
-        index_to_node: An optional relabelling dictionary. By default, array indices
-            are used.
-
-    Returns:
-        The permutation as a string in cycle notation.
-
-    Example:
-        >>> import numpy as np
-        >>> from dwave.graphs import array_to_cycle
-        ...
-        >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
-        >>> array_to_cycle(alpha)
-        '(0,2,1)'
-        >>> array_to_cycle(np.array([2,0,1]), index_to_node={0: 5, 1: 7, 2: 9})
-        '(5,9,7)'
-    """
-    if index_to_node is not None:
-        expected = set(range(len(array)))
-        if index_to_node.keys() != expected:
-            missing = expected - index_to_node.keys()
-            raise ValueError(f"index_to_node missing keys: {missing}")
-
-    label = (lambda x: str(index_to_node[x])) if index_to_node is not None else str
-    unvisited = [True] * len(array)
-    cycle_parts = []
-
-    for i in range(len(array)):
-        if unvisited[i]:
-            cycle_parts.append('(')
-            cycle_parts.append(label(i))
-            unvisited[i] = False
-            j = i
-
-            while unvisited[array[j]]:
-                cycle_parts.append(',')
-                j = array[j]
-                cycle_parts.append(label(j))
-                unvisited[j] = False
-
-            cycle_parts.append(')')
-    return ''.join(cycle_parts)

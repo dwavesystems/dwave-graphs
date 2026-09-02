@@ -1,9 +1,9 @@
 ---
 features:
   - |
-    Add graph automorphism algorithms migrated from ``dwave-experimental``,
-    including functions for computing Schreier representations, sampling
-    automorphisms, and determining vertex and edge orbits.
+    Add graph automorphism algorithms, including functions for computing
+    Schreier representations, sampling automorphisms, and determining vertex and
+    edge orbits.
   - |
     Extend automorphism support to Frucht, Shrikhande, and random regular
-    graphs, with tests to verify correctness against known counts. 
+    graphs, with tests to verify correctness against known counts.
