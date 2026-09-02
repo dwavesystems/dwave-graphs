@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import hashlib
-import random
 from collections import deque
 from collections.abc import Hashable, Mapping
 from dataclasses import dataclass
@@ -63,29 +62,31 @@ class SchreierContext:
         seed: Seed used for reproducibility. Defaults to 42.
         graph_coloring: Optional mapping from original vertex label to color label.
             When provided, the initial partition separates vertices by color.
+        node_order: Optional ordering of the original node labels. Must be contiguous
+            and contain all nodes in the graph. Used to give disjoint components
+            contiguous indices.
     """
 
     def __init__(
         self,
         graph: nx.Graph,
-        num_samples: int | None = None,
-        seed: int = 42,
         graph_coloring: Mapping[Hashable, int] | None = None,
+        node_order: list[Hashable] | None = None,
     ) -> None:
-        original_nodes_sorted = sorted(graph.nodes())
-        self._index_to_node: dict[int, Hashable] = {
-            new: old for new, old in enumerate(original_nodes_sorted)
-        }
-        self._node_to_index: dict[Hashable, int] = {
-            old: new for new, old in enumerate(original_nodes_sorted)
-        }
+        if node_order is None:
+            node_order = sorted(graph.nodes())
+        elif set(node_order) != set(graph.nodes()):
+            raise ValueError("node_order must contain exactly the nodes of the graph")
+
+        self._index_to_node: dict[int, Hashable] = {new: old for new, old in enumerate(node_order)}
+        self._node_to_index: dict[Hashable, int] = {old: new for new, old in enumerate(node_order)}
         graph = nx.relabel_nodes(graph, self._node_to_index)  # relabel nodes contiguously (0...n-1)
 
         # Validate and store graph coloring
         self._graph_coloring = graph_coloring
         if graph_coloring is not None:
             coloring_keys = set(graph_coloring.keys())
-            graph_nodes = set(original_nodes_sorted)
+            graph_nodes = set(node_order)
             missing = graph_nodes - coloring_keys
             extra = coloring_keys - graph_nodes
             if missing:
@@ -103,9 +104,6 @@ class SchreierContext:
         self._graph_edges: list[tuple[int, int]] = list(graph.edges())
         self._neighbours: list[set[int]] = [set(graph.neighbors(i)) for i in range(self._num_nodes)]
         self._graph: nx.Graph = graph
-
-        self._num_samples: int | None = num_samples
-        self._rng: random.Random = random.Random(seed)
 
         self._leaf_nodes: int = 0
         self._nodes_reached: int = 0
@@ -485,14 +483,16 @@ class SchreierContext:
                         in_refine_stack[degree_to_new_color[i]] = 1
                     num_colors[0] += 1
 
+        source_cell = set(partition[color_to_split])  # one fresh obj (ancestors share the original)
         for v in active_vertices[color_to_split]:
             new_color = degree_to_new_color[color_degree[v]]
             if new_color != color_to_split:
-                partition[color_to_split] = partition[color_to_split] - {v}  # must create new obj
+                source_cell.discard(v)
                 partition[new_color].add(v)
                 trace[color_to_split] -= 1
                 trace[new_color] += 1
                 color[v] = new_color
+        partition[color_to_split] = source_cell
 
     def _canon(
         self,
@@ -521,11 +521,8 @@ class SchreierContext:
         By default, graph comparisons using adjacency matrices are not performed, as
         this becomes a bottleneck for even modestly sized graphs. Instead, the
         ``trace`` for each graph is compared, which corresponds to the number of
-        vertices belonging to each color, ordered by color. This check is orders of
-        magnitude faster and has been found to have identical pruning capability
-        for graphs of interest, such as chimera, pegasus, and zephyr graphs, as
-        well as the disjoint compositions of smaller and simpler graphs as may
-        be encountered when doing parallel embeddings.
+        vertices belonging to each color, ordered by color. Automorphisms are
+        verified at leaf nodes before being recorded.
 
         If a graph has more than one component, comparisons using adjacency matrices are
         used. This enables isomorphism detection between components, and in turn
@@ -600,8 +597,8 @@ class SchreierContext:
                 perm_transformed = np.empty(self._num_nodes, dtype=np.intp)
                 perm_candidate = list(chain.from_iterable(partition))
                 perm_transformed[perm_candidate] = self._best_perm
-                self._enter(perm_transformed)
-
+                if self._is_automorphism(perm_transformed):
+                    self._enter(perm_transformed)
             return
 
         candidates = sorted(partition[first_split])
@@ -718,6 +715,15 @@ class SchreierContext:
 
         return cert_hash.digest()
 
+    def _is_automorphism(self, perm: NDArray[np.intp]) -> bool:
+        neighbours = self._neighbours
+        for u, nbrs in enumerate(neighbours):
+            pu_nbrs = neighbours[perm[u]]
+            for w in nbrs:
+                if perm[w] not in pu_nbrs:
+                    return False
+        return True
+
     def _initial_partition(
         self,
     ) -> tuple[list[set[int] | None], np.ndarray, np.ndarray, int]:
@@ -777,7 +783,7 @@ def vertex_orbits(
 
     Example:
         >>> import numpy as np
-        >>> from dwave.experimental.automorphism import vertex_orbits
+        >>> from dwave.graphs import vertex_orbits
         ...
         >>> u_vector = [
         ...     [np.array([0, 1, 4, 3, 2, 6, 5, 7])],
@@ -789,7 +795,8 @@ def vertex_orbits(
         [[0, 2, 4], [1, 3], [5, 6, 7]]
     """
     if not u_vector:
-        return [[x] for x in nodes]
+        label = (lambda x: index_to_node[x]) if index_to_node is not None else int
+        return [[label(x)] for x in nodes]
 
     if not all(isinstance(sublist, list) for sublist in u_vector):
         raise ValueError("u_vector must be a list of lists.")
@@ -847,7 +854,7 @@ def edge_orbits(
 
     Example:
         >>> import numpy as np
-        >>> from dwave.experimental.automorphism import edge_orbits
+        >>> from dwave.graphs import edge_orbits
         ...
         >>> u_vector = [
         ...     [np.array([0, 1, 4, 3, 2, 6, 5, 7])],
@@ -865,7 +872,12 @@ def edge_orbits(
         [[(0, 7), (2, 6), (4, 5)], [(5, 6), (5, 7), (6, 7)]]
     """
     if not u_vector:
-        return [[x] for x in edges]
+        label = (lambda x: index_to_node[x]) if index_to_node is not None else int
+        normalized = []
+        for u, v in edges:
+            e = (u, v) if u < v else (v, u)
+            normalized.append([tuple(label(x) for x in e)])
+        return normalized
 
     if not all(isinstance(sublist, list) for sublist in u_vector):
         raise ValueError("u_vector must be a list of lists.")
@@ -909,6 +921,7 @@ def sample_automorphisms(
     u_vector: list[list[NDArray[np.intp]]],
     num_samples: int = 1,
     seed: int | None = None,
+    num_nodes: int | None = None,
 ) -> list[NDArray[np.intp]]:
     """Uniformly sample automorphisms from the Schreier-Sims representation.
 
@@ -922,13 +935,15 @@ def sample_automorphisms(
         u_vector: Coset representatives grouped by stabilizer index.
         num_samples: The number of automorphisms to return.
         seed: Random seed for reproducibility.
+        num_nodes: The number of nodes in the graph. If not provided, it is
+            inferred from the length of the first coset representative in u_vector.
 
     Returns:
         A list of uniformly sampled automorphisms in one-line notation.
 
     Example:
         >>> import networkx as nx
-        >>> from dwave.experimental.automorphism import schreier_rep, sample_automorphisms
+        >>> from dwave.graphs import schreier_rep, sample_automorphisms
         ...
         >>> graph = nx.cycle_graph(8)
         >>> result = schreier_rep(graph)
@@ -938,7 +953,22 @@ def sample_automorphisms(
         [array([3, 4, 5, 6, 7, 0, 1, 2]), array([6, 5, 4, 3, 2, 1, 0, 7])]
     """
     rng = np.random.default_rng(seed)
-    num_nodes = len(u_vector[0][0])
+
+    if u_vector:
+        inferred = len(u_vector[0][0])
+        if num_nodes is not None and num_nodes != inferred:
+            raise ValueError(
+                f"num_nodes ({num_nodes}) does not match the permutation length "
+                f"in u_vector ({inferred})"
+            )
+        num_nodes = inferred
+    elif num_nodes is None:
+        raise ValueError(
+            "num_nodes must be provided when u_vector is empty (the graph has "
+            "only the trivial identity automorphism, so the permutation length "
+            "cannot be inferred)"
+        )
+
     u_counts = [len(u_i) for u_i in u_vector]
     sampled_automorphisms = []
 
@@ -968,7 +998,7 @@ def mult(alpha: NDArray[np.intp], beta: NDArray[np.intp]) -> NDArray[np.intp]:
 
     Example:
         >>> import numpy as np
-        >>> from dwave.experimental.automorphism import mult
+        >>> from dwave.graphs import mult
         ...
         >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
         >>> beta  = np.array([1,2,0], dtype=np.intp)  # (0,1,2): 0->1, 1->2, 2->0
@@ -990,7 +1020,7 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
 
     Example:
         >>> import numpy as np
-        >>> from dwave.experimental.automorphism import inv
+        >>> from dwave.graphs import inv
         ...
         >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
         >>> inv(3, alpha)
@@ -1003,8 +1033,6 @@ def inv(n: int, alpha: NDArray[np.intp]) -> NDArray[np.intp]:
 
 def schreier_rep(
     graph: nx.Graph,
-    num_samples: int | None = None,
-    seed: int = 42,
     graph_coloring: Mapping[Hashable, int] | None = None,
 ) -> SchreierContext:
     """Compute Schreier representatives and orbits for a graph.
@@ -1031,38 +1059,28 @@ def schreier_rep(
             - ``number_of_nodes()``: total number of nodes
             - ``edges()``: iterable of all edges
             - ``neighbors()``: iterable of all neighbours for a given node
-        num_samples: Number of samples to use for generating new coset representatives
-            from the existing set. If not provided, all coset representatives are used.
-        seed: Random seed for reproducibility. Defaults to 42.
         graph_coloring: Optional mapping from original vertex label to color label.
     """
+    if graph_coloring is not None:
+        coloring_keys = set(graph_coloring.keys())
+        graph_nodes = set(graph.nodes())
+        missing = graph_nodes - coloring_keys
+        extra = coloring_keys - graph_nodes
+        if missing:
+            raise ValueError(f"graph_coloring is missing nodes: {missing}")
+        if extra:
+            raise ValueError(f"graph_coloring contains nodes not in graph: {extra}")
+
     if nx.number_connected_components(graph) == 1:
-        ctx = SchreierContext(
-            graph, num_samples=num_samples, seed=seed, graph_coloring=graph_coloring
-        )
+        ctx = SchreierContext(graph, graph_coloring=graph_coloring)
         initial_partition, trace, color, num_colors = ctx._initial_partition()
 
         ctx._canon(initial_partition, trace, color, num_colors)
         return ctx
 
-    # relabel vertices so components have contiguous labels
-    index_to_node = {}
-    node_to_index = {}
-    next_label = 0
-
-    component_vertices = list(nx.connected_components(graph))
-    for vertices in component_vertices:
-        for vertex in sorted(vertices):
-            node_to_index[vertex] = next_label
-            index_to_node[next_label] = vertex
-            next_label += 1
-
-    graph = nx.relabel_nodes(graph, node_to_index, copy=True)
-
-    # enter component automorphisms into global graph
-    ctx = SchreierContext(graph, num_samples=num_samples, seed=seed)
-    ctx._index_to_node = index_to_node
-    ctx._node_to_index = node_to_index
+    # order nodes so each component's labels are contiguous
+    node_order = [v for component in nx.connected_components(graph) for v in sorted(component)]
+    ctx = SchreierContext(graph, node_order=node_order)
 
     # group isomorphic components together
     components = [ctx._graph.subgraph(c).copy() for c in nx.connected_components(ctx._graph)]
@@ -1072,11 +1090,9 @@ def schreier_rep(
         # extract per-component coloring keyed by the component's node labels
         comp_coloring = None
         if graph_coloring is not None:
-            comp_coloring = {v: graph_coloring[index_to_node[v]] for v in comp.nodes()}
+            comp_coloring = {v: graph_coloring[ctx.index_to_node[v]] for v in comp.nodes()}
 
-        ctx_comp = SchreierContext(
-            comp, num_samples=num_samples, seed=seed, graph_coloring=comp_coloring
-        )
+        ctx_comp = SchreierContext(comp, graph_coloring=comp_coloring)
         ctx_comp._compare_adj = True
 
         initial_partition, trace, color, num_colors = ctx_comp._initial_partition()
@@ -1136,7 +1152,7 @@ def array_to_cycle(
 
     Example:
         >>> import numpy as np
-        >>> from dwave.experimental.automorphism import array_to_cycle
+        >>> from dwave.graphs import array_to_cycle
         ...
         >>> alpha = np.array([2,0,1], dtype=np.intp)  # (0,2,1): 0->2, 1->0, 2->1
         >>> array_to_cycle(alpha)

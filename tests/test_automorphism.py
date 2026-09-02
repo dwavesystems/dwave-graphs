@@ -588,6 +588,94 @@ class Automorphisms(unittest.TestCase):
         ctx = SchreierContext(big_graph)
         self.assertEqual(ctx._color_dtype, np.uint32)
 
+    def test_asymmetric_graph_original_labels(self):
+        """Test that original labels are preserved in the orbits of graphs with
+        no non-trivial automorphisms."""
+        graph = nx.Graph([('a', 'b'), ('b', 'c'), ('c', 'd'), ('d', 'e'), ('e', 'f'), ('c', 'g')])
+        result = schreier_rep(graph)
+        self.assertEqual(result.u_vector, [])  # confirms the rigid/early-return path
+
+        vertex_orbs = result.vertex_orbits_original_labels
+        self.assertEqual(sorted(vertex_orbs), [['a'], ['b'], ['c'], ['d'], ['e'], ['f'], ['g']])
+
+        edge_orbs = result.edge_orbits_original_labels
+        flat = sorted(e for orbit in edge_orbs for e in orbit)
+        self.assertEqual(
+            flat,
+            [('a', 'b'), ('b', 'c'), ('c', 'd'), ('c', 'g'), ('d', 'e'), ('e', 'f')],
+        )
+        # every edge must be a normalized 2-tuple of original (string) labels
+        for orbit in edge_orbs:
+            for e in orbit:
+                self.assertIsInstance(e, tuple)
+                self.assertEqual(len(e), 2)
+                self.assertTrue(all(isinstance(x, str) for x in e))
+
+    def test_asymmetric_graph_sample_automorphisms(self):
+        """Test that sampling automorphisms from a graph with no non-trivial automorphisms
+        returns only the identity permutation when ``num_nodes`` is supplied."""
+        graph = nx.Graph([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (2, 6)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.u_vector, [])
+
+        num_nodes = graph.number_of_nodes()
+        samples = sample_automorphisms(result.u_vector, num_samples=2, num_nodes=num_nodes)
+        identity = np.arange(num_nodes)
+        self.assertEqual(len(samples), 2)
+        for perm in samples:
+            self.assertTrue(np.array_equal(perm, identity))
+
+    def test_sample_automorphisms_empty_requires_num_nodes(self):
+        """Sampling from an empty ``u_vector`` without ``num_nodes`` raises ValueError,
+        since the permutation length cannot be inferred."""
+        graph = nx.Graph([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (2, 6)])
+        result = schreier_rep(graph)
+        self.assertEqual(result.u_vector, [])
+
+        with self.assertRaisesRegex(ValueError, "num_nodes"):
+            sample_automorphisms(result.u_vector)
+
+    def test_frucht(self):
+        """The Frucht graph is 3-regular with a trivial automorphism group (|Aut| = 1).
+        1-WL trace equality wrongly certifies many leaves as automorphic here, so trace-only leaf
+        comparison badly overcounts."""
+        graph = nx.frucht_graph()
+        result = schreier_rep(graph)
+        self.assertEqual(result.num_automorphisms, 1)
+        # every vertex is in its own orbit for an asymmetric graph
+        self.assertEqual(
+            sorted(result.vertex_orbits),
+            [[i] for i in range(graph.number_of_nodes())],
+        )
+
+    def test_shrikhande(self):
+        """The Shrikhande graph is strongly regular (16, 6, 2, 2) with |Aut| = 192.
+        1-WL is immediately stable on strongly regular graphs, so trace-only leaf
+        comparison badly overcounts."""
+        graph = nx.Graph()
+        for a in range(4):
+            for b in range(4):
+                for da, db in [(1, 0), (0, 1), (1, 1)]:
+                    graph.add_edge((a, b), ((a + da) % 4, (b + db) % 4))
+        result = schreier_rep(nx.convert_node_labels_to_integers(graph))
+        self.assertEqual(result.num_automorphisms, 192)
+
+    def test_random_regular_matches_bruteforce(self):
+        """Sweep random regular graphs and cross-check num_automorphisms against a
+        brute-force VF2 automorphism count. 1-WL trace equality wrongly certifies
+        many leaves as automorphic here, so trace-only leaf comparison badly overcounts."""
+        from networkx.algorithms.isomorphism import GraphMatcher
+
+        for seed in range(20):
+            for d, n in [(3, 8), (3, 10), (4, 9), (4, 10)]:
+                if (d * n) % 2:  # d*n must be even for a d-regular graph on n nodes
+                    continue
+                graph = nx.random_regular_graph(d, n, seed=seed)
+                expected = sum(1 for _ in GraphMatcher(graph, graph).isomorphisms_iter())
+                result = schreier_rep(graph)
+                with self.subTest(seed=seed, d=d, n=n):
+                    self.assertEqual(result.num_automorphisms, expected)
+
 
 class TestGraphColoring(unittest.TestCase):
     def test_initial_partition_structure(self):
@@ -701,6 +789,22 @@ class TestGraphColoring(unittest.TestCase):
         for orbit in result.vertex_orbits:
             colors = {coloring[result.index_to_node[v]] for v in orbit}
             self.assertEqual(len(colors), 1)
+
+    def test_multicomponent_coloring_missing_nodes_raises(self):
+        """Multi-component graph with an incomplete coloring must raise ValueError,
+        matching the single-component path (currently raises bare KeyError)."""
+        graph = nx.disjoint_union(nx.path_graph(2), nx.path_graph(2))
+        coloring = {0: 0, 1: 0, 2: 0}  # missing node 3
+        with self.assertRaisesRegex(ValueError, "missing nodes"):
+            schreier_rep(graph, graph_coloring=coloring)
+
+    def test_multicomponent_coloring_extra_nodes_raises(self):
+        """Multi-component graph with an extraneous coloring key must raise
+        ValueError (currently silently accepted)."""
+        graph = nx.disjoint_union(nx.path_graph(2), nx.path_graph(2))
+        coloring = {0: 0, 1: 0, 2: 0, 3: 0, 99: 5}  # extra node 99
+        with self.assertRaisesRegex(ValueError, "not in graph"):
+            schreier_rep(graph, graph_coloring=coloring)
 
 
 if __name__ == "__main__":
