@@ -31,6 +31,14 @@ __all__ = [
 ]
 
 
+def _safe_sort(nodes):
+    """Sort node labels, falling back to insertion order for unorderable mixed types."""
+    try:
+        return sorted(nodes)
+    except TypeError:
+        return list(nodes)
+
+
 @dataclass
 class ComponentInfo:
     """Container for per-component data used during automorphism discovery on disjoint graphs."""
@@ -53,9 +61,6 @@ class SchreierContext:
 
     Args:
         graph: A NetworkX Graph object representing the input graph.
-        num_samples: Number of samples to use for generating new coset representatives
-            from the existing set. If not provided, all coset representatives are used.
-        seed: Seed used for reproducibility. Defaults to 42.
         graph_coloring: Optional mapping from original vertex label to color label.
             When provided, the initial partition separates vertices by color.
         node_order: Optional ordering of the original node labels. Must be contiguous
@@ -70,8 +75,8 @@ class SchreierContext:
         node_order: list[Hashable] | None = None,
     ) -> None:
         if node_order is None:
-            node_order = sorted(graph.nodes())
-        elif set(node_order) != set(graph.nodes()):
+            node_order = _safe_sort(graph.nodes())
+        elif len(node_order) != graph.number_of_nodes() or set(node_order) != set(graph.nodes()):
             raise ValueError("node_order must contain exactly the nodes of the graph")
 
         self._index_to_node: dict[int, Hashable] = {new: old for new, old in enumerate(node_order)}
@@ -83,11 +88,9 @@ class SchreierContext:
         if graph_coloring is not None:
             coloring_keys = set(graph_coloring.keys())
             graph_nodes = set(node_order)
-            missing = graph_nodes - coloring_keys
-            extra = coloring_keys - graph_nodes
-            if missing:
+            if missing := graph_nodes - coloring_keys:
                 raise ValueError(f"graph_coloring is missing nodes: {missing}")
-            if extra:
+            if extra := coloring_keys - graph_nodes:
                 raise ValueError(f"graph_coloring contains nodes not in graph: {extra}")
             self._graph_coloring_internal: dict[int, int] | None = {
                 self._node_to_index[v]: c for v, c in graph_coloring.items()
@@ -293,6 +296,8 @@ class SchreierContext:
         """Perform color refinement on the current partition until an equitable
         coloring is reached.
 
+        Mutates ``partition``, ``trace``, and ``color`` in place.
+
         This procedure implements the 1-dimensional Weisfeiler-Leman (WL) refinement,
         following Algorithms 2 and 3 of Berkholz (2016), *Tight lower and upper bounds
         for the complexity of canonical color refinement*.
@@ -422,6 +427,9 @@ class SchreierContext:
     ) -> None:
         """Splits a color class into subcells based on the color-degrees of its vertices.
 
+        Mutates ``partition``, ``color``, ``trace``, ``refine_stack``,
+        ``in_refine_stack``, and ``num_colors`` in place.
+
         Based on algorithm 3 of Berkholz (2016), *Tight lower and upper bounds
         for the complexity of canonical color refinement*.
 
@@ -433,8 +441,7 @@ class SchreierContext:
 
         The largest resulting subcell retains the original color label, while
         all smaller subcells are assigned new colors and pushed onto the
-        refinement stack (Hopcroft's trick). The partition structure, trace array,
-        number of colors, and vertex-to-color mapping are updated in place.
+        refinement stack (Hopcroft's trick).
 
         Args:
             color_to_split: The color class to be split.
@@ -501,6 +508,8 @@ class SchreierContext:
     ) -> None:
         """Generate search tree based on iterative color refinement and vertex
         individualization.
+
+        Mutates ``partition``, ``trace``, and ``color`` in place.
 
         Loosely based on Algorithm 7.9 from Kreher, D. L., & Stinson, D. R. (1999).
         Combinatorial algorithms: Generation, enumeration, and search. Additional
@@ -791,18 +800,18 @@ def vertex_orbits(
         >>> vertex_orbits(u_vector, nodes)
         [[0, 2, 4], [1, 3], [5, 6, 7]]
     """
+    if isinstance(nodes, np.ndarray):
+        nodes = nodes.tolist()
+
+    if not isinstance(nodes, list) or not all(isinstance(n, int) for n in nodes):
+        raise ValueError("nodes must be a list of integers.")
+
     if not u_vector:
         label = (lambda x: index_to_node[x]) if index_to_node is not None else int
         return [[label(x)] for x in nodes]
 
     if not all(isinstance(sublist, list) for sublist in u_vector):
         raise ValueError("u_vector must be a list of lists.")
-
-    if isinstance(nodes, np.ndarray):
-        nodes = nodes.tolist()
-
-    if not isinstance(nodes, list) or not all(isinstance(n, int) for n in nodes):
-        raise ValueError("nodes must be a list of integers.")
 
     visited = set()
     orbits = []
@@ -868,6 +877,9 @@ def edge_orbits(
         >>> orbits[1:]
         [[(0, 7), (2, 6), (4, 5)], [(5, 6), (5, 7), (6, 7)]]
     """
+    if not isinstance(edges, list) or not all(isinstance(e, tuple) for e in edges):
+        raise TypeError("edges must be a list of tuples")
+
     if not u_vector:
         label = (lambda x: index_to_node[x]) if index_to_node is not None else int
         normalized = []
@@ -878,9 +890,6 @@ def edge_orbits(
 
     if not all(isinstance(sublist, list) for sublist in u_vector):
         raise ValueError("u_vector must be a list of lists.")
-
-    if not isinstance(edges, list) or not all(isinstance(e, tuple) for e in edges):
-        raise TypeError("edges must be a list of tuples")
 
     visited = set()
     orbits = []
@@ -1016,11 +1025,9 @@ def schreier_rep(
     if graph_coloring is not None:
         coloring_keys = set(graph_coloring.keys())
         graph_nodes = set(graph.nodes())
-        missing = graph_nodes - coloring_keys
-        extra = coloring_keys - graph_nodes
-        if missing:
+        if missing := graph_nodes - coloring_keys:
             raise ValueError(f"graph_coloring is missing nodes: {missing}")
-        if extra:
+        if extra := coloring_keys - graph_nodes:
             raise ValueError(f"graph_coloring contains nodes not in graph: {extra}")
 
     if nx.number_connected_components(graph) == 1:
@@ -1031,7 +1038,7 @@ def schreier_rep(
         return ctx
 
     # order nodes so each component's labels are contiguous
-    node_order = [v for component in nx.connected_components(graph) for v in sorted(component)]
+    node_order = [v for component in nx.connected_components(graph) for v in _safe_sort(component)]
     ctx = SchreierContext(graph, node_order=node_order)
 
     # group isomorphic components together
