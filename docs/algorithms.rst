@@ -16,6 +16,26 @@ binary quadratic model samplers.
     optimal solution. The functions that use a sampler do not attempt to confirm
     the quality of the returned solution.
 
+.. _graphs_automorphism:
+
+Automorphism
+============
+
+An automorphism of a graph is a permutation of its vertices that preserves
+adjacency. The set of all automorphisms forms the graph's automorphism group,
+which describes its symmetries.
+
+.. automodule:: dwave.graphs.algorithms.automorphism
+
+.. autosummary::
+    :toctree: generated/
+
+    schreier_rep
+    SchreierContext
+    sample_automorphisms
+    vertex_orbits
+    edge_orbits
+
 .. _graphs_canonicalization:
 
 Canonicalization
