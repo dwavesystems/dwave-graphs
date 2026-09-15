@@ -17,7 +17,6 @@ license-files = ["LICEN[CS]E*"]
 classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -31,7 +30,7 @@ dependencies = [
 # note: 3.14.1 excluded due to a regression bug breaking dataclasses in NetworkX
 # see: https://github.com/networkx/networkx/issues/8362,
 # https://github.com/python/cpython/issues/142214
-requires-python = ">=3.10, !=3.14.1"
+requires-python = ">=3.11, !=3.14.1"
 
 [project.urls]
 Changelog = "https://github.com/dwavesystems/dwave-graphs/releases"
@@ -44,8 +43,7 @@ changelog = [
     "reno==4.1.0",
 ]
 dev = [
-    "numpy==2.2.6; python_version < '3.11'",    # latest that supports 3.10
-    "numpy==2.4.4; python_version >= '3.11'",   # latest as of April 2026
+    "numpy==2.5.3",         # latest as of September 2026
     "dimod==0.12.22",       # latest that includes the migrated BQM generators
     "networkx==3.4.2",      # latest that supports 3.10 (and numpy 2)
     {include-group = "changelog"},

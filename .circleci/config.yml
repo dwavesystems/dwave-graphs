@@ -230,7 +230,7 @@ workflows:
       - test-linux:
           matrix:
             parameters:
-              python-version: &python-versions ["3.10", "3.11", "3.12", "3.13", "3.14"]
+              python-version: &python-versions ["3.11", "3.12", "3.13", "3.14"]
               dependency-versions: [&dependencies-oldest "dimod==0.12.22 networkx==3.2 numpy==2",
                                     &dependencies-latest "dimod networkx numpy",
                                     ]
