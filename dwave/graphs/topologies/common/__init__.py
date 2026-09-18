@@ -1,4 +1,4 @@
-# Copyright 2026 D-Wave Systems Inc.
+# Copyright 2026 D-Wave
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -19,9 +19,7 @@ from dwave.graphs.topologies.common.planeshift import *
 from dwave.graphs.topologies.common.shape import *
 from dwave.graphs.topologies.common.topology import *
 
-# Explicit re-exports. Without this, ``from ... import *`` on this package would
-# also export the submodule names bound by the imports above, and the ``common``
-# submodule would shadow this package in ``dwave.graphs.topologies``.
+
 __all__ = [
     "Coord",
     "CoordKind",

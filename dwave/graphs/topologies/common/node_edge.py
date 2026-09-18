@@ -192,8 +192,7 @@ class TopologyEdge(ABC, Edge):
 
 @total_ordering
 class TopologyNode(ABC):
-    """
-    A blueprint class to represent the node of a topology.
+    """A blueprint class to represent the node of a topology.
 
     Every concrete subclass must set the class variable ``topology_name``
     (the name of the topology it belongs to, e.g. ``"zephyr"``).
