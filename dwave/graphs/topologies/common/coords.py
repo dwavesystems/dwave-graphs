@@ -68,6 +68,7 @@ class Coord(ABC):
             Whether the coordinate is consistent with the shape.
         """
 
+    @property
     @abstractmethod
     def is_quotient(self) -> bool:
         """Whether the given coordinate is a quotient coordinate."""
@@ -116,7 +117,7 @@ class Coord(ABC):
         """Returns the tuple cooresponding to the coordinate."""
 
     @cached_property
-    def _tuple_format(self) -> tuple[Any, ...]:
+    def _as_tuple(self) -> tuple[Any, ...]:
         """The tuple associated with the object."""
         return self.to_tuple()
 
@@ -124,28 +125,28 @@ class Coord(ABC):
         if type(self) is not type(other):
             return NotImplemented
         return (
-            self.is_quotient() == other.is_quotient() and self._tuple_format == other._tuple_format
+            self.is_quotient == other.is_quotient and self._as_tuple == other._as_tuple
         )
 
     def __lt__(self, other: object) -> bool:
         if type(self) is not type(other):
             return NotImplemented
-        return (self.is_quotient(), self._tuple_format) < (other.is_quotient(), other._tuple_format)
+        return (self.is_quotient, self._as_tuple) < (other.is_quotient, other._as_tuple)
 
     def __hash__(self) -> int:
-        return hash((type(self), self._tuple_format))
+        return hash((type(self), self._as_tuple))
 
     def __iter__(self) -> Iterator[Any]:
-        return iter(self._tuple_format)
+        return iter(self._as_tuple)
 
     def __len__(self) -> int:
-        return len(self._tuple_format)
+        return len(self._as_tuple)
 
     def __getitem__(self, i: int) -> Any:
-        return self._tuple_format[i]
+        return self._as_tuple[i]
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}{self._tuple_format}"
+        return f"{type(self).__name__}{self._as_tuple}"
 
     def __str__(self) -> str:
-        return f"{self._tuple_format}"
+        return f"{self._as_tuple}"

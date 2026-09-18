@@ -15,7 +15,8 @@
 
 from __future__ import annotations
 
-from dwave.graphs.topologies.common.shape import TopologyShape, _Infinite, _Quotient
+from dwave.graphs.topologies.common.shape import (TopologyShape,
+                                                  Infinite, Quotient, INFINITE, QUOTIENT)
 
 __all__ = ["ZephyrShape"]
 
@@ -34,51 +35,53 @@ class ZephyrShape(TopologyShape):
 
     def __init__(
         self,
-        m: int | _Infinite = _Infinite.INFINITE,
-        t: int | _Quotient = _Quotient.QUOTIENT,
+        m: int | Infinite = INFINITE,
+        t: int | Quotient = QUOTIENT,
         check_shape_valid: bool = True,
         *args,
         **kwargs,
     ) -> None:
         super().__init__(m, t, check_shape_valid, *args, **kwargs)
 
-    def _args_are_valid(self, m: int | _Infinite, t: int | _Quotient, *args, **kwargs) -> None:
+    def _args_are_valid(self, m: int | Infinite, t: int | Quotient, *args, **kwargs) -> None:
         """Checks whether the given parameters are valid for a Zephyr shape.
 
         Args:
             m: The grid size of Zephyr graph.
             t: The tile size of Zephyr graph.
         Raises:
-            ValueError: If m is not ``_Infinite.INFINITE`` and is non-positive.
-            ValueError: If t is not ``_Quotient.QUOTIENT`` and is non-positive.
+            ValueError: If m is not ``INFINITE`` and is non-positive.
+            ValueError: If t is not ``QUOTIENT`` and is non-positive.
         """
-        if not isinstance(m, _Infinite):
+        if m is not INFINITE:
             if m <= 0:
                 raise ValueError(
-                    f"Expected either ``_Infinite.INFINITE`` or a positive integer for m, got {m}"
+                    f"Expected either ``INFINITE`` or a positive integer for m, got {m}"
                 )
-        if not isinstance(t, _Quotient):
+        if t is not QUOTIENT:
             if t <= 0:
                 raise ValueError(
-                    f"Expected either ```_Quotient.QUOTIENT`` or a positive integer for t, got {t}"
+                    f"Expected either ```QUOTIENT`` or a positive integer for t, got {t}"
                 )
 
-    def to_tuple(self) -> tuple[int | _Infinite, int | _Quotient]:
+    def to_tuple(self) -> tuple[int | Infinite, int | Quotient]:
         """Returns the tuple that identifies the Zephyr shape."""
         return (self._m, self._t)
 
     def to_quotient(self) -> ZephyrShape:
         """Converts the shape to its corresponding quotient tile size shape."""
-        return ZephyrShape(m=self.m, t=_Quotient.QUOTIENT)
+        return ZephyrShape(m=self.m, t=QUOTIENT)
 
+    @property
     def is_quotient(self) -> bool:
         """Tells whether the shape represents a shape with quotient tile size."""
-        return self.t is _Quotient.QUOTIENT
+        return self.t is QUOTIENT
 
     def to_infinite(self) -> TopologyShape:
         """Converts the shape to its corresponding infinite grid size shape."""
-        return ZephyrShape(m=_Infinite.INFINITE, t=self.t)
+        return ZephyrShape(m=INFINITE, t=self.t)
 
+    @property
     def is_infinite(self) -> bool:
         """Tells whether the shape represents a shape with infinite grid size."""
-        return self.m is _Infinite.INFINITE
+        return self.m is INFINITE

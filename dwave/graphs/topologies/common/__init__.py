@@ -12,29 +12,22 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from dwave.graphs.topologies.common.common import _add_compatible_edges, _add_compatible_nodes, _add_compatible_terms
-from dwave.graphs.topologies.common.coords import *
-from dwave.graphs.topologies.common.node_edge import *
-from dwave.graphs.topologies.common.planeshift import *
-from dwave.graphs.topologies.common.shape import *
-from dwave.graphs.topologies.common.topology import *
-
-
-__all__ = [
-    "Coord",
-    "CoordKind",
-    "Edge",
-    "EdgeKind",
-    "ExternalNeighborsMixin",
-    "InternalNeighborsMixin",
-    "NeighborContributorMixin",
-    "NodeKind",
-    "OddNeighborsMixin",
-    "Topology",
-    "TopologyEdge",
-    "TopologyNode",
-    "TopologyPlaneShift",
-    "TopologyShape",
-    "_Infinite",
-    "_Quotient",
-]
+from dwave.graphs.topologies.common.common import (
+    _add_compatible_edges,
+    _add_compatible_nodes,
+    _add_compatible_terms,
+)
+from dwave.graphs.topologies.common.coords import Coord, CoordKind
+from dwave.graphs.topologies.common.node_edge import (
+    Edge,
+    EdgeKind,
+    ExternalNeighborsMixin,
+    InternalNeighborsMixin,
+    NeighborContributorMixin,
+    NodeKind,
+    OddNeighborsMixin,
+)
+from dwave.graphs.topologies.common.planeshift import TopologyPlaneShift
+from dwave.graphs.topologies.common.shape import (TopologyShape,
+                                                  Infinite, Quotient, INFINITE, QUOTIENT)
+from dwave.graphs.topologies.common.topology import Topology, TopologyEdge, TopologyNode

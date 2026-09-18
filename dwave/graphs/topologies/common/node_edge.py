@@ -22,7 +22,7 @@ from typing import Callable, ClassVar, Generator, Hashable, Iterable, Type
 
 from dwave.graphs.topologies.common.coords import Coord, CoordKind
 from dwave.graphs.topologies.common.planeshift import TopologyPlaneShift
-from dwave.graphs.topologies.common.shape import TopologyShape, _Infinite, _Quotient
+from dwave.graphs.topologies.common.shape import TopologyShape, Infinite, Quotient
 
 __all__ = [
     "NodeKind",
@@ -131,7 +131,6 @@ class TopologyEdge(ABC, Edge):
     #: every concrete subclass, e.g. ``topology_name = "zephyr"``.
     topology_name: ClassVar[str]
 
-
     def __init__(
         self,
         x: TopologyNode,
@@ -221,8 +220,8 @@ class TopologyNode(ABC):
 
     def __init__(
         self,
-        coord: Coord | tuple[int | _Quotient, ...],
-        shape: TopologyShape | tuple[int | _Quotient | _Infinite, ...] | None = None,
+        coord: Coord | tuple[int | Quotient, ...],
+        shape: TopologyShape | tuple[int | Quotient | Infinite, ...] | None = None,
         coord_kind: CoordKind | None = None,
         check_node_valid: bool = True,
     ) -> None:
@@ -256,7 +255,7 @@ class TopologyNode(ABC):
     @abstractmethod
     def _find_shape(
         self,
-        shape: TopologyShape | tuple[int | _Quotient | _Infinite, ...] | None,
+        shape: TopologyShape | tuple[int | Quotient | Infinite, ...] | None,
         check_shape_valid: bool,
     ) -> TopologyShape:
         """Finds the shape of the topology graph the node belongs to.
@@ -273,7 +272,7 @@ class TopologyNode(ABC):
     @abstractmethod
     def _find_coord_kind(
         self,
-        coord: Coord | tuple[int | _Quotient, ...],
+        coord: Coord | tuple[int | Quotient, ...],
         coord_kind: CoordKind | None,
     ) -> CoordKind:
         """Finds the coordinate kind that the node is represented with.
@@ -289,7 +288,7 @@ class TopologyNode(ABC):
     @abstractmethod
     def _find_ccoord(
         self,
-        coord: Coord | tuple[int | _Quotient, ...],
+        coord: Coord | tuple[int | Quotient, ...],
         check_coord_valid: bool,
     ) -> Coord:
         """Finds the canonical coordinate of the node to use in class methods' computations.
@@ -338,9 +337,10 @@ class TopologyNode(ABC):
             case _:
                 raise AssertionError(f"Unhandled NodeKind value: {node_kind}")
 
+    @property
     def is_quotient(self) -> bool:
         """Tells if the node is quotient."""
-        return self._ccoord.is_quotient() and self._shape.is_quotient()
+        return self._ccoord.is_quotient and self._shape.is_quotient
 
     def to_quotient(self) -> TopologyNode:
         """Returns the quotient node corresponding to the node."""
@@ -369,12 +369,14 @@ class TopologyNode(ABC):
     @property
     def coord(self) -> Coord:
         """Coordinate of the node, in the coordinate system it is represented with to the user."""
-        return (self._ccoord).convert(self.coord_kind)
+        return self._ccoord.convert(self.coord_kind)
 
+    @property
     def is_vertical(self) -> bool:
         """Tells if the node represents a vertical qubit."""
         return self.node_kind is NodeKind.VERTICAL
 
+    @property
     def is_horizontal(self) -> bool:
         """Tells if the node represents a horizontal qubit."""
         return self.node_kind is NodeKind.HORIZONTAL
@@ -396,7 +398,7 @@ class TopologyNode(ABC):
             or :attr:`EdgeKind.INVALID` if the two nodes do not form a valid
             edge of the topology.
         """
-        if type(self) is not type(other):
+        if not isinstance(other, type(self)):
             raise TypeError(
                 f"Expected an instance of {type(self).__name__}, "
                 f"got {type(other).__name__}"

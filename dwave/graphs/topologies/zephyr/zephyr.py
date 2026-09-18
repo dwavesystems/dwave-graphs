@@ -18,7 +18,15 @@ from typing import Callable, Iterable
 
 import networkx as nx
 
-from dwave.graphs.topologies.common import CoordKind, EdgeKind, Topology, _Infinite, _Quotient
+from dwave.graphs.topologies.common import (
+    CoordKind,
+    EdgeKind,
+    Topology,
+    Infinite,
+    Quotient,
+    INFINITE,
+    QUOTIENT,
+)
 from dwave.graphs.topologies.zephyr.coords import ZephyrCartesianCoord, ZephyrCoord
 from dwave.graphs.topologies.zephyr.graphs import zephyr_graph
 from dwave.graphs.topologies.zephyr.node_edge import ZephyrEdge, ZephyrNode, _neighbor_ccoords
@@ -97,11 +105,19 @@ class Zephyr(Topology):
         Returns:
             A Zephyr graph with the given shape.
         """
-        return zephyr_graph(*shape, create_using, node_list, edge_list, data, coordinates,
-                            check_node_list, check_edge_list)
+        return zephyr_graph(
+            *shape,
+            create_using,
+            node_list,
+            edge_list,
+            data,
+            coordinates,
+            check_node_list,
+            check_edge_list,
+        )
 
     def _find_shape(
-        self, shape: ZephyrShape | tuple[int | _Infinite, int | _Quotient]
+        self, shape: ZephyrShape | tuple[int | Infinite, int | Quotient]
     ) -> ZephyrShape:
         """Finds the Zephyr shape of the graph.
 
@@ -123,7 +139,7 @@ class Zephyr(Topology):
 
     def nodes(
         self,
-        shape: ZephyrShape | tuple[int | _Infinite, int | _Quotient],
+        shape: ZephyrShape | tuple[int | Infinite, int | Quotient],
         coord_kind: CoordKind | None = None,
     ) -> set[ZephyrNode]:
         """Returns the nodes of a Zephyr graph.
@@ -137,7 +153,7 @@ class Zephyr(Topology):
         Raises:
             NotImplementedError: If ``coord_kind`` is :attr:`CoordKind.LINEAR`.
             ValueError: If ``shape`` is not a valid Zephyr shape.
-            ValueError: If the grid size of the shape is ``_Infinite.INFINITE``.
+            ValueError: If the grid size of the shape is ``INFINITE``.
 
         Returns:
             The nodes of the Zephyr graph.
@@ -149,14 +165,14 @@ class Zephyr(Topology):
             raise NotImplementedError("Zephyr does not support linear coordinates")
 
         shape = self._find_shape(shape)
-        if shape.m is _Infinite.INFINITE:
+        if shape.m is INFINITE:
             raise ValueError(
                 "Cannot generate infinite number of nodes!\nProvide a finite grid size."
             )
         m, t = shape
         nodes = set()
         range_x = range(4 * m + 1)
-        range_t = [_Quotient.QUOTIENT] if t is _Quotient.QUOTIENT else range(t)
+        range_t = [QUOTIENT] if t is QUOTIENT else range(t)
         for x in range_x:
             if x % 2 == 0:
                 range_y = range(1, 4 * m + 1, 2)
@@ -175,7 +191,7 @@ class Zephyr(Topology):
 
     def edges(
         self,
-        shape: ZephyrShape | tuple[int | _Infinite, int | _Quotient],
+        shape: ZephyrShape | tuple[int | Infinite, int | Quotient],
         edge_kind: EdgeKind | Iterable[EdgeKind] | None = None,
         where: Callable[[ZephyrCartesianCoord | ZephyrCoord], bool] | None = None,
         coord_kind: CoordKind | None = None,
@@ -197,7 +213,7 @@ class Zephyr(Topology):
         Raises:
             NotImplementedError: If ``coord_kind`` is :attr:`CoordKind.LINEAR`.
             ValueError: If ``shape`` is not a valid Zephyr shape.
-            ValueError: If the grid size of the shape is ``_Infinite.INFINITE``.
+            ValueError: If the grid size of the shape is ``INFINITE``.
 
         Returns:
             The edges of the Zephyr graph.
@@ -209,7 +225,7 @@ class Zephyr(Topology):
             raise NotImplementedError("Zephyr does not support linear coordinates")
 
         shape = self._find_shape(shape)
-        if shape.m is _Infinite.INFINITE:
+        if shape.m is INFINITE:
             raise ValueError(
                 "Cannot generate infinite number of nodes!\nProvide a finite grid size."
             )

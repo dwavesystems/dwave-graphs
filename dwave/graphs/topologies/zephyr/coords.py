@@ -20,7 +20,7 @@
 from __future__ import annotations
 from collections.abc import Callable, Generator, Iterable, Sequence
 import networkx as nx
-from dwave.graphs.topologies.common import Coord, CoordKind, _Infinite, _Quotient
+from dwave.graphs.topologies.common import INFINITE, QUOTIENT, Coord, CoordKind, Infinite, Quotient
 from dwave.graphs.topologies.zephyr.graphs import zephyr_graph
 from dwave.graphs.topologies.zephyr.shape import ZephyrShape
 
@@ -194,8 +194,8 @@ class zephyr_coordinates:
 
     @staticmethod
     def zephyr_to_cartesian(
-        g: tuple[int, int, int | _Quotient, int, int] | ZephyrCoord,
-    ) -> tuple[int, int, int | _Quotient]:
+        g: tuple[int, int, int | Quotient, int, int] | ZephyrCoord,
+    ) -> tuple[int, int, int | Quotient]:
         """Converts a Zephyr coordinate to Cartesian coordinates.
 
         Args:
@@ -215,8 +215,8 @@ class zephyr_coordinates:
 
     @staticmethod
     def cartesian_to_zephyr(
-        c: tuple[int, int, int | _Quotient] | ZephyrCartesianCoord,
-    ) -> tuple[int, int, int | _Quotient, int, int]:
+        c: tuple[int, int, int | Quotient] | ZephyrCartesianCoord,
+    ) -> tuple[int, int, int | Quotient, int, int]:
         """Converts Cartesian coordinates to a Zephyr coordinate.
 
         Args:
@@ -297,7 +297,7 @@ class ZephyrCartesianCoord(Coord):
         self,
         x: int,
         y: int,
-        k: int | _Quotient,
+        k: int | Quotient,
         check_coord: bool = True,
     ) -> None:
         if check_coord:
@@ -305,9 +305,9 @@ class ZephyrCartesianCoord(Coord):
 
         self._x: int = x
         self._y: int = y
-        self._k: int | _Quotient = k
+        self._k: int | Quotient = k
 
-    def _args_valid_topology(self, x: int, y: int, k: int | _Quotient) -> None:
+    def _args_valid_topology(self, x: int, y: int, k: int | Quotient) -> None:
         """Verifies the coordinate is a valid Zephyr Cartesian coordinate.
 
         Args:
@@ -324,7 +324,7 @@ class ZephyrCartesianCoord(Coord):
             raise ValueError(f"Expected x, y to be non-negative, got {x, y}")
         if x % 2 == y % 2:
             raise ValueError(f"Expected x, y to differ in parity, got {x, y}")
-        if k is not _Quotient.QUOTIENT and k < 0:
+        if k is not QUOTIENT and k < 0:
             raise ValueError(f"Expected k to be non-negative, got {k}")
 
     def is_shape_consistent(self, shape: ZephyrShape) -> bool:
@@ -338,14 +338,14 @@ class ZephyrCartesianCoord(Coord):
         """
         # check x, y value of coord is consistent with m
         shape_m, shape_t = shape
-        if not isinstance(shape_m, _Infinite):
+        if shape_m is not INFINITE:
             if not all(val in range(4 * shape_m + 1) for val in (self._x, self._y)):
                 return False
 
         # check k value of coord is consistent with t
-        if isinstance(shape_t, _Quotient):
-            return isinstance(self._k, _Quotient)
-        elif isinstance(self._k, _Quotient):
+        if shape_t is QUOTIENT:
+            return self._k is QUOTIENT
+        elif self._k is QUOTIENT:
             return False
         return self._k in range(shape_t)
 
@@ -360,22 +360,23 @@ class ZephyrCartesianCoord(Coord):
         return self._y
 
     @property
-    def k(self) -> int | _Quotient:
+    def k(self) -> int | Quotient:
         """``k`` value of the coordinate."""
         return self._k
 
-    def to_tuple(self) -> tuple[int, int, int | _Quotient]:
+    def to_tuple(self) -> tuple[int, int, int | Quotient]:
         """Returns the tuple cooresponding to the coordinate."""
         return (self._x, self._y, self._k)
 
+    @property
     def is_quotient(self) -> bool:
         """Whether the given coordinate is a quotient coordinate."""
-        return self.k is _Quotient.QUOTIENT
+        return self.k is QUOTIENT
 
     def to_quotient(self) -> ZephyrCartesianCoord:
         """Converts the Cartesian coordinate to its corresponding
         Cartesian coordinate in a quotient Zephyr graph."""
-        return ZephyrCartesianCoord(x=self._x, y=self._y, k=_Quotient.QUOTIENT, check_coord=False)
+        return ZephyrCartesianCoord(x=self._x, y=self._y, k=QUOTIENT, check_coord=False)
 
     def to_non_quotient(self, shape: ZephyrShape, **kwargs) -> list[ZephyrCartesianCoord]:
         """Expands the coordinate to non-quotient coordinates.
@@ -394,11 +395,11 @@ class ZephyrCartesianCoord(Coord):
             The expansion of the coordinate into non-quotient.
         """
 
-        if shape.is_quotient():
+        if shape.is_quotient:
             raise ValueError(f"Expected shape to be non-quotient, got {shape}")
 
         # Check value of the Cartesian coordinate is consistent with shape
-        if not self.is_quotient():
+        if not self.is_quotient:
             if not self.is_shape_consistent(shape=shape):
                 raise ValueError(f"{self} is not consistent with {shape}")
             return [self]
@@ -443,12 +444,12 @@ class ZephyrCartesianCoord(Coord):
                     "Must provide shape to convert to linear index"
                     )
 
-            if shape.is_quotient() or shape.is_infinite():
+            if shape.is_quotient or shape.is_infinite:
                 raise ValueError(
                     "Must provide non-quotient, non-infinite shape to convert to linear index"
                     )
 
-            if self.is_quotient():
+            if self.is_quotient:
                 raise ValueError(
                     f"Cannot convert quotient coordinate {self} to a linear index"
                     )
@@ -488,7 +489,7 @@ class ZephyrCoord(Coord):
         self,
         u: int,
         w: int,
-        k: int | _Quotient,
+        k: int | Quotient,
         j: int,
         z: int,
         check_coord: bool = True,
@@ -499,7 +500,7 @@ class ZephyrCoord(Coord):
 
         self._u: int = u
         self._w: int = w
-        self._k: int | _Quotient = k
+        self._k: int | Quotient = k
         self._j: int = j
         self._z: int = z
 
@@ -514,7 +515,7 @@ class ZephyrCoord(Coord):
         return self._w
 
     @property
-    def k(self) -> int | _Quotient:
+    def k(self) -> int | Quotient:
         """``k`` value of the coordinate."""
         return self._k
 
@@ -528,7 +529,7 @@ class ZephyrCoord(Coord):
         """``z`` value of the coordinate."""
         return self._z
 
-    def _args_valid_topology(self, u: int, w: int, k: int | _Quotient, j: int, z: int) -> None:
+    def _args_valid_topology(self, u: int, w: int, k: int | Quotient, j: int, z: int) -> None:
         """Verifies the coordinate is a valid Zephyr coordinate.
 
         Args:
@@ -549,7 +550,7 @@ class ZephyrCoord(Coord):
         if any(par < 0 for par in (w, z)):
             raise ValueError(
                 f"Expected w, z to be non-negative, got {(u, w, k, j, z) = }")
-        if k is not _Quotient.QUOTIENT and k < 0:
+        if k is not QUOTIENT and k < 0:
             raise ValueError(
                 f"Expected k to be QUOTIENT or non-negative, got {k}")
 
@@ -564,29 +565,30 @@ class ZephyrCoord(Coord):
         """
         # w, z value of coord is consistent with grid size
         shape_m, shape_t = shape
-        if not isinstance(shape_m, _Infinite):
+        if shape_m is not INFINITE:
             if self.w not in range(2 * shape_m + 1) or self.z not in range(shape_m):
                 return False
 
         # k value of coord is consistent with tile size
-        if isinstance(shape_t, _Quotient):
-            return isinstance(self.k, _Quotient)
-        elif isinstance(self.k, _Quotient):
+        if shape_t is QUOTIENT:
+            return self.k is QUOTIENT
+        elif self.k is QUOTIENT:
             return False
         return self.k in range(shape_t)
 
+    @property
     def is_quotient(self) -> bool:
         """Whether the given coordinate is a quotient coordinate."""
-        return self.k is _Quotient.QUOTIENT
+        return self.k is QUOTIENT
 
-    def to_tuple(self) -> tuple[int, int, int | _Quotient, int, int]:
+    def to_tuple(self) -> tuple[int, int, int | Quotient, int, int]:
         """Returns the tuple cooresponding to the coordinate."""
         return (self._u, self._w, self._k, self._j, self._z)
 
     def to_quotient(self) -> ZephyrCoord:
         """Converts the coordinate to its corresponding
         Zephyr coordinate in a quotient Zephyr graph."""
-        return ZephyrCoord(u=self.u, w=self.w, k=_Quotient.QUOTIENT, j=self.j, z=self.z)
+        return ZephyrCoord(u=self.u, w=self.w, k=QUOTIENT, j=self.j, z=self.z)
 
     def to_non_quotient(self, shape: ZephyrShape, **kwargs) -> list[ZephyrCoord]:
         """Expands the coordinate to all non-quotient coordinates;
@@ -603,9 +605,9 @@ class ZephyrCoord(Coord):
         Returns:
             The expansion of the coordinate into non-quotient.
         """
-        if shape.is_quotient():
+        if shape.is_quotient:
             raise ValueError(f"Expected shape to be non-quotient, got {shape}")
-        if not self.is_quotient():
+        if not self.is_quotient:
             if not self.is_shape_consistent(shape):
                 raise ValueError(f"{self} is not consistent with {shape}.")
             return [self]
@@ -651,11 +653,11 @@ class ZephyrCoord(Coord):
             if shape is None:
                 raise ValueError(
                     "Must provide shape to convert to linear index")
-            if shape.is_quotient() or shape.is_infinite():
+            if shape.is_quotient or shape.is_infinite:
                 raise ValueError(
                     "Must provide non-quotient, non-infinite shape to convert to linear index")
 
-            if self.is_quotient():
+            if self.is_quotient:
                 raise ValueError(
                     f"Cannot convert quotient coordinate {self} to a linear index")
 

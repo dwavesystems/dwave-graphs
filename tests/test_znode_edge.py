@@ -17,7 +17,7 @@ import unittest
 
 from parameterized import parameterized
 
-from dwave.graphs.topologies.common import CoordKind, EdgeKind, NodeKind, _Infinite, _Quotient
+from dwave.graphs.topologies.common import CoordKind, EdgeKind, NodeKind, INFINITE, QUOTIENT
 from dwave.graphs.topologies.zephyr import (ZephyrCartesianCoord, ZephyrCoord, ZephyrEdge,
                                             ZephyrNode, ZephyrPlaneShift, ZephyrShape,
                                             zephyr_coordinates)
@@ -29,7 +29,7 @@ class TestZephyrEdge(unittest.TestCase):
         [
             (ZephyrCoord(0, 10, 3, 1, 3), ZephyrCoord(0, 10, 3, 1, 2), ZephyrShape(6, 4)),
             (ZephyrCartesianCoord(4, 3, 2), ZephyrCartesianCoord(4, 1, 2), (6, 3)),
-            ((1, 6, _Quotient.QUOTIENT), (5, 6, _Quotient.QUOTIENT), None),
+            ((1, 6, QUOTIENT), (5, 6, QUOTIENT), None),
         ]
     )
     def test_valid_input_runs(self, x, y, shape) -> None:
@@ -126,11 +126,11 @@ class TestZephyrNode(unittest.TestCase):
             ((0, 3), 6),
             ((6, 3), 5),
         ]
-        self.xyms = xym_vals + [(xy, _Infinite.INFINITE) for xy, _ in xym_vals]
+        self.xyms = xym_vals + [(xy, INFINITE) for xy, _ in xym_vals]
         self.left_up_xyms = [
             ((0, 3), 6),
-            ((0, 3), _Infinite.INFINITE),
-            ((11, 0), _Infinite.INFINITE),
+            ((0, 3), INFINITE),
+            ((11, 0), INFINITE),
             ((0, 5), 8),
         ]
         self.right_down_xyms = [((1, 12), 3), ((16, 1), 4)]
@@ -190,8 +190,8 @@ class TestZephyrNode(unittest.TestCase):
     @parameterized.expand(
         [
             ((0, 3), 6, ZephyrPlaneShift(-1, -1)),
-            ((0, 3), _Infinite.INFINITE, ZephyrPlaneShift(-1, -1)),
-            ((11, 0), _Infinite.INFINITE, ZephyrPlaneShift(-1, -1)),
+            ((0, 3), INFINITE, ZephyrPlaneShift(-1, -1)),
+            ((11, 0), INFINITE, ZephyrPlaneShift(-1, -1)),
             ((0, 5), 8, ZephyrPlaneShift(-1, -1)),
             ((1, 12), 3, ZephyrPlaneShift(1, 1)),
             ((16, 1), 4, ZephyrPlaneShift(1, 1)),
@@ -284,8 +284,8 @@ class TestZephyrNode(unittest.TestCase):
     @parameterized.expand(
         [
             (((11, 12, 4), ZephyrShape(t=6)), ZephyrCoord(1, 6, 4, 1, 2)),
-            (((1, 0), None), ZephyrCoord(1, 0, _Quotient.QUOTIENT, 0, 0)),
-            (((0, 1), None), ZephyrCoord(0, 0, _Quotient.QUOTIENT, 0, 0)),
+            (((1, 0), None), ZephyrCoord(1, 0, QUOTIENT, 0, 0)),
+            (((0, 1), None), ZephyrCoord(0, 0, QUOTIENT, 0, 0)),
         ]
     )
     def test_zcoord(self, node_args, expected) -> None:
@@ -337,10 +337,10 @@ class TestZephyrNode(unittest.TestCase):
     def test_node_kind(self, uwkjz, mt) -> None:
         zn = ZephyrNode(coord=uwkjz, shape=mt)
         if uwkjz[0] == 0:
-            self.assertTrue(zn.is_vertical())
+            self.assertTrue(zn.is_vertical)
             self.assertEqual(zn.node_kind, NodeKind.VERTICAL)
         else:
-            self.assertTrue(zn.is_horizontal())
+            self.assertTrue(zn.is_horizontal)
             self.assertEqual(zn.node_kind, NodeKind.HORIZONTAL)
 
     @parameterized.expand(
@@ -428,10 +428,10 @@ class TestZephyrNode(unittest.TestCase):
             ((0, 1), 2, EdgeKind.ODD, 0, 1),
             ((0, 1), 4, EdgeKind.EXTERNAL, 0, 1),
             ((0, 1), 4, None, 2, 2),
-            ((24, 5), _Infinite.INFINITE, EdgeKind.INTERNAL, 4, 0),
-            ((24, 5), _Infinite.INFINITE, EdgeKind.ODD, 0, 2),
-            ((24, 5), _Infinite.INFINITE, EdgeKind.EXTERNAL, 0, 2),
-            ((24, 5), _Infinite.INFINITE, None, 4, 4),
+            ((24, 5), INFINITE, EdgeKind.INTERNAL, 4, 0),
+            ((24, 5), INFINITE, EdgeKind.ODD, 0, 2),
+            ((24, 5), INFINITE, EdgeKind.EXTERNAL, 0, 2),
+            ((24, 5), INFINITE, None, 4, 4),
             ((24, 5), 6, EdgeKind.INTERNAL, 2, 0),
             ((24, 5), 8, EdgeKind.ODD, 0, 2),
             ((24, 5), 6, EdgeKind.EXTERNAL, 0, 2),
@@ -440,8 +440,8 @@ class TestZephyrNode(unittest.TestCase):
         ]
     )
     def test_degree(self, xy, m, nbr_kind, a, b) -> None:
-        for t in [_Quotient.QUOTIENT, 1, 4, 6]:
-            if t is _Quotient.QUOTIENT:
+        for t in [QUOTIENT, 1, 4, 6]:
+            if t is QUOTIENT:
                 coord, t_p = xy, 1
             else:
                 coord, t_p = xy + (0,), t
@@ -485,7 +485,7 @@ class TestZephyrNode(unittest.TestCase):
 
     def test_coord_properties(self):
         zn = ZephyrNode((5, 2), ZephyrShape(6))
-        self.assertEqual(zn.ccoord, ZephyrCartesianCoord(5, 2, _Quotient.QUOTIENT))
+        self.assertEqual(zn.ccoord, ZephyrCartesianCoord(5, 2, QUOTIENT))
         self.assertEqual(zn.topology_coord, zn.zcoord)
         self.assertEqual(zn.coord, zn.ccoord)
         topology = ZephyrNode((11, 12, 4), ZephyrShape(t=6), coord_kind=CoordKind.TOPOLOGY)
@@ -494,7 +494,7 @@ class TestZephyrNode(unittest.TestCase):
     def test_four_tuple_coord(self):
         self.assertEqual(
             ZephyrNode((0, 1, 0, 0)),
-            ZephyrNode((0, 1, _Quotient.QUOTIENT, 0, 0)),
+            ZephyrNode((0, 1, QUOTIENT, 0, 0)),
         )
 
     @parameterized.expand(
@@ -524,7 +524,7 @@ class TestZephyrNode(unittest.TestCase):
         shape = ZephyrShape(6)
         a = ZephyrNode((5, 2), shape)
         b = ZephyrNode(
-            ZephyrCartesianCoord(5, 3, _Quotient.QUOTIENT, check_coord=False),
+            ZephyrCartesianCoord(5, 3, QUOTIENT, check_coord=False),
             shape=shape,
             check_node_valid=False,
         )
@@ -538,7 +538,7 @@ class TestZephyrNode(unittest.TestCase):
         ]
     )
     def test_is_quotient(self, zn, expected) -> None:
-        self.assertEqual(zn.is_quotient(), expected)
+        self.assertEqual(zn.is_quotient, expected)
 
     def test_to_quotient(self) -> None:
         zn = ZephyrNode((0, 1, 2), ZephyrShape(t=4))

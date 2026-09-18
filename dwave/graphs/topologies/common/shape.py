@@ -16,33 +16,33 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum, auto
+from enum import Enum
 from functools import cached_property
-from typing import Any, ClassVar, Iterator
+from typing import Any, ClassVar, Iterator, Literal, TypeAlias
 
-__all__ = [
-    "_Quotient",
-    "_Infinite",
-    "TopologyShape",
-]
+__all__ = ["Quotient", "QUOTIENT", "Infinite", "INFINITE", "TopologyShape"]
 
 
-class _Quotient(Enum):
-    QUOTIENT = auto()
+class _QuotientType(Enum):
+    QUOTIENT = "QUOTIENT"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<QUOTIENT>"
 
 
-class _Infinite(Enum):
-    INFINITE = auto()
+QUOTIENT = _QuotientType.QUOTIENT
+Quotient: TypeAlias = Literal[_QuotientType.QUOTIENT]
 
-    def __repr__(self):
+
+class _InfiniteType(Enum):
+    INFINITE = "INFINITE"
+
+    def __repr__(self) -> str:
         return "<INFINITE>"
 
 
-QUOTIENT = _Quotient.QUOTIENT
-INFINITE = _Infinite.INFINITE
+INFINITE = _InfiniteType.INFINITE
+Infinite: TypeAlias = Literal[_InfiniteType.INFINITE]
 
 
 class TopologyShape(ABC):
@@ -52,8 +52,8 @@ class TopologyShape(ABC):
     (the name of the topology it belongs to, e.g. ``"zephyr"``).
 
     Args:
-        m: The grid size of topology. Defaults to ``_Infinite.INFINITE``.
-        t: The tile size of topology. Defaults to ``_Quotient.QUOTIENT``.
+        m: The grid size of topology. Defaults to ``INFINITE``.
+        t: The tile size of topology. Defaults to ``QUOTIENT``.
         check_shape_valid: Flag to whether to check the
             parameters are valid on instantiation. Defaults to ``True``.
 
@@ -67,8 +67,8 @@ class TopologyShape(ABC):
 
     def __init__(
         self,
-        m: int | _Infinite = _Infinite.INFINITE,
-        t: int | _Quotient = _Quotient.QUOTIENT,
+        m: int | Infinite = INFINITE,
+        t: int | Quotient = QUOTIENT,
         check_shape_valid: bool = True,
         *args,
         **kwargs,
@@ -76,21 +76,21 @@ class TopologyShape(ABC):
         if check_shape_valid:
             self._args_are_valid(m, t, *args, **kwargs)
 
-        self._m: int | _Infinite = m
-        self._t: int | _Quotient = t
+        self._m: int | Infinite = m
+        self._t: int | Quotient = t
 
     @property
-    def m(self) -> int | _Infinite:
+    def m(self) -> int | Infinite:
         """The grid size of the topology."""
         return self._m
 
     @property
-    def t(self) -> int | _Quotient:
+    def t(self) -> int | Quotient:
         """The tile size of the topology."""
         return self._t
 
     @abstractmethod
-    def _args_are_valid(self, m: int | _Infinite, t: int | _Quotient, *args, **kwargs) -> None:
+    def _args_are_valid(self, m: int | Infinite, t: int | Quotient, *args, **kwargs) -> None:
         """Checks whether the given parameters are valid for a topology shape.
 
         Args:
@@ -106,6 +106,7 @@ class TopologyShape(ABC):
             The shape converted to its corresponding quotient shape.
         """
 
+    @property
     @abstractmethod
     def is_quotient(self) -> bool:
         """Tells whether the shape represents a quotient shape.
@@ -122,6 +123,7 @@ class TopologyShape(ABC):
             The shape converted to its corresponding infinite grid size shape.
         """
 
+    @property
     @abstractmethod
     def is_infinite(self) -> bool:
         """Tells whether the shape represents a shape with infinite grid size.
@@ -135,29 +137,29 @@ class TopologyShape(ABC):
         """Returns the pair of values that uniquely identifies the shape."""
 
     @cached_property
-    def _tuple_format(self) -> tuple[Any, ...]:
+    def _as_tuple(self) -> tuple[Any, ...]:
         """The tuple associated with the object."""
         return self.to_tuple()
 
     def __eq__(self, value: object) -> bool:
         if type(self) is not type(value):
             return NotImplemented
-        return self._tuple_format == value._tuple_format
+        return self._as_tuple == value._as_tuple
 
     def __hash__(self) -> int:
-        return hash((type(self), self._tuple_format))
+        return hash((type(self), self._as_tuple))
 
     def __iter__(self) -> Iterator[Any]:
-        return iter(self._tuple_format)
+        return iter(self._as_tuple)
 
     def __len__(self) -> int:
-        return len(self._tuple_format)
+        return len(self._as_tuple)
 
     def __getitem__(self, i: int) -> Any:
-        return self._tuple_format[i]
+        return self._as_tuple[i]
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}{self._tuple_format}"
+        return f"{type(self).__name__}{self._as_tuple}"
 
     def __str__(self) -> str:
-        return f"{self._tuple_format}"
+        return f"{self._as_tuple}"

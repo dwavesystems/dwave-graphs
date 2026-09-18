@@ -17,7 +17,7 @@ from unittest import TestCase
 
 from parameterized import parameterized
 
-from dwave.graphs.topologies.common import _Infinite, _Quotient
+from dwave.graphs.topologies.common import INFINITE, QUOTIENT
 from dwave.graphs.topologies.zephyr import ZephyrShape
 
 
@@ -27,8 +27,8 @@ class TestZephyrShape(TestCase):
             ((-1, 2),),
             ((0, 3),),
             ((3, -1),),
-            ((_Quotient.QUOTIENT, 3),),
-            ((3, _Infinite.INFINITE),),
+            ((QUOTIENT, 3),),
+            ((3, INFINITE),),
             ((3, 0),),
         ]
     )
@@ -42,9 +42,9 @@ class TestZephyrShape(TestCase):
             ((1, 1),),
             ((1, 10),),
             ((),),
-            ((_Infinite.INFINITE, _Quotient.QUOTIENT),),
-            ((_Infinite.INFINITE, 1),),
-            ((3, _Quotient.QUOTIENT),),
+            ((INFINITE, QUOTIENT),),
+            ((INFINITE, 1),),
+            ((3, QUOTIENT),),
         ]
     )
     def test_valid_runs(self, good_shape):
@@ -52,21 +52,21 @@ class TestZephyrShape(TestCase):
 
     @parameterized.expand(
         [
-            ((2, _Quotient.QUOTIENT), True),
-            ((_Infinite.INFINITE, _Quotient.QUOTIENT), True),
-            ((_Infinite.INFINITE, 1), False),
+            ((2, QUOTIENT), True),
+            ((INFINITE, QUOTIENT), True),
+            ((INFINITE, 1), False),
             ((4, 6), False),
             ((1, 1), False),
         ]
     )
     def test_is_quotient(self, shape, expected):
-        self.assertEqual(ZephyrShape(*shape).is_quotient(), expected)
+        self.assertEqual(ZephyrShape(*shape).is_quotient, expected)
 
     @parameterized.expand(
         [
-            ((2, 3), (2, _Quotient.QUOTIENT)),
-            ((1, _Quotient.QUOTIENT), (1, _Quotient.QUOTIENT)),
-            ((_Infinite.INFINITE, 3), (_Infinite.INFINITE, _Quotient.QUOTIENT)),
+            ((2, 3), (2, QUOTIENT)),
+            ((1, QUOTIENT), (1, QUOTIENT)),
+            ((INFINITE, 3), (INFINITE, QUOTIENT)),
         ]
     )
     def test_to_quotient(self, shape, shape_quo):
@@ -74,9 +74,9 @@ class TestZephyrShape(TestCase):
 
     @parameterized.expand(
         [
-            ((2, 3), (_Infinite.INFINITE, 3)),
-            ((1, _Quotient.QUOTIENT), (_Infinite.INFINITE, _Quotient.QUOTIENT)),
-            ((_Infinite.INFINITE, 4), (_Infinite.INFINITE, 4)),
+            ((2, 3), (INFINITE, 3)),
+            ((1, QUOTIENT), (INFINITE, QUOTIENT)),
+            ((INFINITE, 4), (INFINITE, 4)),
         ]
     )
     def test_to_infinite(self, shape, shape_inf):
@@ -84,12 +84,12 @@ class TestZephyrShape(TestCase):
 
     @parameterized.expand(
         [
-            ((_Infinite.INFINITE, 2), True),
-            ((_Infinite.INFINITE, _Quotient.QUOTIENT), True),
-            ((1, _Quotient.QUOTIENT), False),
+            ((INFINITE, 2), True),
+            ((INFINITE, QUOTIENT), True),
+            ((1, QUOTIENT), False),
             ((4, 6), False),
             ((1, 1), False),
         ]
     )
     def test_is_infinite(self, shape, expected):
-        self.assertEqual(ZephyrShape(*shape).is_infinite(), expected)
+        self.assertEqual(ZephyrShape(*shape).is_infinite, expected)

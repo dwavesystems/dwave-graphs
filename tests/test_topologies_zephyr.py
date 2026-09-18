@@ -17,7 +17,7 @@ import unittest
 
 from parameterized import parameterized
 
-from dwave.graphs.topologies.common import CoordKind, EdgeKind, _Infinite, _Quotient
+from dwave.graphs.topologies.common import CoordKind, EdgeKind, INFINITE, QUOTIENT
 from dwave.graphs.topologies.zephyr import (Zephyr, ZephyrCartesianCoord, ZephyrCoord,
                                             ZephyrShape)
 
@@ -103,23 +103,23 @@ class TestZephyr(unittest.TestCase):
 
     def test_nodes_infinite_grid_raises(self):
         with self.assertRaises(ValueError):
-            Zephyr().nodes(shape=(_Infinite.INFINITE, 2))
+            Zephyr().nodes(shape=(INFINITE, 2))
 
     def test_edges_infinite_grid_raises(self):
         with self.assertRaises(ValueError):
-            Zephyr().edges(shape=(_Infinite.INFINITE, 2))
+            Zephyr().edges(shape=(INFINITE, 2))
 
     def test_nodes_quotient_tile(self):
         # Quotient tile size collapses the k-index to a single sentinel value,
         # so the node count must match the t=1 graph.
         zeph = Zephyr()
-        quotient = zeph.nodes(shape=(4, _Quotient.QUOTIENT))
+        quotient = zeph.nodes(shape=(4, QUOTIENT))
         self.assertEqual(len(quotient), len(zeph.nodes(shape=(4, 1))))
         self.assertEqual(len(quotient), 4 * 4 * (2 * 4 + 1))
 
     def test_edges_quotient_tile(self):
         zeph = Zephyr()
-        quotient = zeph.edges(shape=(4, _Quotient.QUOTIENT))
+        quotient = zeph.edges(shape=(4, QUOTIENT))
         self.assertEqual(len(quotient), len(zeph.edges(shape=(4, 1))))
 
     def test_single_edge_kind_partitions_all_edges(self):

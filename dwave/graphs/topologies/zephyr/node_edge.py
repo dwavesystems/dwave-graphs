@@ -19,10 +19,16 @@ from itertools import product
 from typing import Callable, Generator
 
 from dwave.graphs.topologies.common.coords import CoordKind
-from dwave.graphs.topologies.common.node_edge import (EdgeKind, ExternalNeighborsMixin,
-                                                      InternalNeighborsMixin, NodeKind,
-                                                      OddNeighborsMixin, TopologyEdge, TopologyNode)
-from dwave.graphs.topologies.common.shape import _Infinite, _Quotient
+from dwave.graphs.topologies.common.node_edge import (
+    EdgeKind,
+    ExternalNeighborsMixin,
+    InternalNeighborsMixin,
+    NodeKind,
+    OddNeighborsMixin,
+    TopologyEdge,
+    TopologyNode,
+)
+from dwave.graphs.topologies.common.shape import Infinite, Quotient, QUOTIENT
 from dwave.graphs.topologies.zephyr.coords import ZephyrCartesianCoord, ZephyrCoord
 from dwave.graphs.topologies.zephyr.planeshift import ZephyrPlaneShift
 from dwave.graphs.topologies.zephyr.shape import ZephyrShape
@@ -103,9 +109,10 @@ def _neighbor_ccoords(
     match edge_kind:
         case EdgeKind.INTERNAL:
             # The four diagonally adjacent positions, across every tile index.
-            k_vals = [_Quotient.QUOTIENT] if shape.t is _Quotient.QUOTIENT else range(shape.t)
-            candidates = ((x + dx, y + dy, k_val)
-                          for dx, dy in product((-1, 1), (-1, 1)) for k_val in k_vals)
+            k_vals = [QUOTIENT] if shape.t is QUOTIENT else range(shape.t)
+            candidates = (
+                (x + dx, y + dy, k_val) for dx, dy in product((-1, 1), (-1, 1)) for k_val in k_vals
+            )
         case EdgeKind.EXTERNAL | EdgeKind.ODD:
             # Four (external) or two (odd) positions along the parallel direction.
             step = 4 if edge_kind is EdgeKind.EXTERNAL else 2
@@ -129,7 +136,7 @@ class ZephyrNode(
     OddNeighborsMixin,
 ):
     """Represents a node of a graph with Zephyr topology with coordinate and optional shape,
-        coordinate kind representation and node validation.
+    coordinate kind representation and node validation.
 
     Args:
         coord: Coordinate in (quotient) Zephyr graph.
@@ -174,12 +181,12 @@ class ZephyrNode(
         coord: (
             ZephyrCartesianCoord
             | ZephyrCoord
-            | tuple[int, int, int | _Quotient]
-            | tuple[int, int, int | _Quotient, int, int]
+            | tuple[int, int, int | Quotient]
+            | tuple[int, int, int | Quotient, int, int]
             | tuple[int, int]
             | tuple[int, int, int, int]
         ),
-        shape: ZephyrShape | tuple[int | _Infinite, int | _Quotient] | None = None,
+        shape: ZephyrShape | tuple[int | Infinite, int | Quotient] | None = None,
         coord_kind: CoordKind | None = None,
         check_node_valid: bool = True,
     ) -> None:
@@ -192,7 +199,7 @@ class ZephyrNode(
 
     def _find_shape(
         self,
-        shape: ZephyrShape | tuple[int | _Quotient | _Infinite, ...] | None,
+        shape: ZephyrShape | tuple[int | Quotient | Infinite, ...] | None,
         check_shape_valid: bool,
     ) -> ZephyrShape:
         """Finds the shape of the Zephyr graph the node belongs to.
@@ -221,8 +228,8 @@ class ZephyrNode(
         coord: (
             ZephyrCartesianCoord
             | ZephyrCoord
-            | tuple[int, int, int | _Quotient]
-            | tuple[int, int, int | _Quotient, int, int]
+            | tuple[int, int, int | Quotient]
+            | tuple[int, int, int | Quotient, int, int]
             | tuple[int, int]
             | tuple[int, int, int, int]
         ),
@@ -246,8 +253,8 @@ class ZephyrNode(
     def _tuple_to_coord(
         self,
         coord: (
-            tuple[int, int, int | _Quotient]
-            | tuple[int, int, int | _Quotient, int, int]
+            tuple[int, int, int | Quotient]
+            | tuple[int, int, int | Quotient, int, int]
             | tuple[int, int]
             | tuple[int, int, int, int]
         ),
@@ -267,9 +274,9 @@ class ZephyrNode(
             The Zephyr coordinate the coordinate corresponds to.
         """
         if len(coord) == 2:
-            coord = (coord[0], coord[1], _Quotient.QUOTIENT)
+            coord = (coord[0], coord[1], QUOTIENT)
         elif len(coord) == 4:
-            coord = (coord[0], coord[1], _Quotient.QUOTIENT, coord[2], coord[3])
+            coord = (coord[0], coord[1], QUOTIENT, coord[2], coord[3])
 
         if len(coord) == 3:
             try:
@@ -286,8 +293,8 @@ class ZephyrNode(
         coord: (
             ZephyrCartesianCoord
             | ZephyrCoord
-            | tuple[int, int, int | _Quotient]
-            | tuple[int, int, int | _Quotient, int, int]
+            | tuple[int, int, int | Quotient]
+            | tuple[int, int, int | Quotient, int, int]
             | tuple[int, int]
             | tuple[int, int, int, int]
         ),

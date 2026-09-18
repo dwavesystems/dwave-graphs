@@ -17,7 +17,7 @@ from unittest import TestCase
 
 from parameterized import parameterized
 
-from dwave.graphs.topologies.common import CoordKind, _Infinite, _Quotient
+from dwave.graphs.topologies.common import CoordKind, INFINITE, QUOTIENT
 from dwave.graphs.topologies.zephyr import (
     ZephyrCartesianCoord,
     ZephyrCoord,
@@ -32,8 +32,8 @@ class TestZephyrShape(TestCase):
             ((-1, 2),),
             ((0, 3),),
             ((3, -1),),
-            ((_Quotient.QUOTIENT, 3),),
-            ((3, _Infinite.INFINITE),),
+            ((QUOTIENT, 3),),
+            ((3, INFINITE),),
             ((3, 0),),
         ]
     )
@@ -47,9 +47,9 @@ class TestZephyrShape(TestCase):
             ((1, 1),),
             ((1, 10),),
             ((),),
-            ((_Infinite.INFINITE, _Quotient.QUOTIENT),),
-            ((_Infinite.INFINITE, 1),),
-            ((3, _Quotient.QUOTIENT),),
+            ((INFINITE, QUOTIENT),),
+            ((INFINITE, 1),),
+            ((3, QUOTIENT),),
         ]
     )
     def test_valid_runs(self, good_shape):
@@ -57,21 +57,21 @@ class TestZephyrShape(TestCase):
 
     @parameterized.expand(
         [
-            ((2, _Quotient.QUOTIENT), True),
-            ((_Infinite.INFINITE, _Quotient.QUOTIENT), True),
-            ((_Infinite.INFINITE, 1), False),
+            ((2, QUOTIENT), True),
+            ((INFINITE, QUOTIENT), True),
+            ((INFINITE, 1), False),
             ((4, 6), False),
             ((1, 1), False),
         ]
     )
     def test_is_quotient(self, shape, expected):
-        self.assertEqual(ZephyrShape(*shape).is_quotient(), expected)
+        self.assertEqual(ZephyrShape(*shape).is_quotient, expected)
 
     @parameterized.expand(
         [
-            ((2, 3), (2, _Quotient.QUOTIENT)),
-            ((1, _Quotient.QUOTIENT), (1, _Quotient.QUOTIENT)),
-            ((_Infinite.INFINITE, 3), (_Infinite.INFINITE, _Quotient.QUOTIENT)),
+            ((2, 3), (2, QUOTIENT)),
+            ((1, QUOTIENT), (1, QUOTIENT)),
+            ((INFINITE, 3), (INFINITE, QUOTIENT)),
         ]
     )
     def test_to_quotient(self, shape, shape_quo):
@@ -79,9 +79,9 @@ class TestZephyrShape(TestCase):
 
     @parameterized.expand(
         [
-            ((2, 3), (_Infinite.INFINITE, 3)),
-            ((1, _Quotient.QUOTIENT), (_Infinite.INFINITE, _Quotient.QUOTIENT)),
-            ((_Infinite.INFINITE, 4), (_Infinite.INFINITE, 4)),
+            ((2, 3), (INFINITE, 3)),
+            ((1, QUOTIENT), (INFINITE, QUOTIENT)),
+            ((INFINITE, 4), (INFINITE, 4)),
         ]
     )
     def test_to_infinite(self, shape, shape_inf):
@@ -89,15 +89,15 @@ class TestZephyrShape(TestCase):
 
     @parameterized.expand(
         [
-            ((_Infinite.INFINITE, 2), True),
-            ((_Infinite.INFINITE, _Quotient.QUOTIENT), True),
-            ((1, _Quotient.QUOTIENT), False),
+            ((INFINITE, 2), True),
+            ((INFINITE, QUOTIENT), True),
+            ((1, QUOTIENT), False),
             ((4, 6), False),
             ((1, 1), False),
         ]
     )
     def test_is_infinite(self, shape, expected):
-        self.assertEqual(ZephyrShape(*shape).is_infinite(), expected)
+        self.assertEqual(ZephyrShape(*shape).is_infinite, expected)
 
     @parameterized.expand([("m",), ("t",)])
     def test_shape_values_are_read_only(self, attr):
@@ -126,7 +126,7 @@ class TestZephyrCartesianCoord(TestCase):
             ((0, 0, 0),),
             ((-1, 2, 2),),
             ((0, 1, -2),),
-            ((-1, 2, _Quotient.QUOTIENT),),
+            ((-1, 2, QUOTIENT),),
         ]
     )
     def test_invalid_input_raises_error(self, xyk):
@@ -136,7 +136,7 @@ class TestZephyrCartesianCoord(TestCase):
     @parameterized.expand(
         [
             ((0, 17, 4),),
-            ((1, 0, _Quotient.QUOTIENT),),
+            ((1, 0, QUOTIENT),),
             ((1, 2, 10),),
         ]
     )
@@ -146,16 +146,16 @@ class TestZephyrCartesianCoord(TestCase):
     @parameterized.expand(
         [
             ((17, 0, 0), (4, 1), False),
-            ((0, 17, 0), (4, _Quotient.QUOTIENT), False),
+            ((0, 17, 0), (4, QUOTIENT), False),
             ((0, 3, 3), (1,), False),
-            ((5, 2, 1), (6, _Quotient.QUOTIENT), False),
+            ((5, 2, 1), (6, QUOTIENT), False),
             ((5, 2, 1), (6, 1), False),
             ((5, 2, 1), (6, 2), True),
-            ((16, 1, _Quotient.QUOTIENT), (4,), True),
+            ((16, 1, QUOTIENT), (4,), True),
             ((1, 12, 1), (3, 2), True),
-            ((3, 0, _Quotient.QUOTIENT), (4,), True),
+            ((3, 0, QUOTIENT), (4,), True),
             ((6, 3, 10), (2, 12), True),
-            ((5, 2, _Quotient.QUOTIENT), (6, 2), False),
+            ((5, 2, QUOTIENT), (6, 2), False),
         ]
     )
     def test_is_shape_consistent(self, xyk, shape, expected):
@@ -171,9 +171,9 @@ class TestZephyrCartesianCoord(TestCase):
             ),
             (
                 (5, 2, 1),
-                (6, _Quotient.QUOTIENT),
+                (6, QUOTIENT),
             ),
-            ((17, 0, _Quotient.QUOTIENT), (4, 2)),
+            ((17, 0, QUOTIENT), (4, 2)),
         ]
     )
     def test_to_non_quotient_raises_error(self, xyk, shape):
@@ -183,8 +183,8 @@ class TestZephyrCartesianCoord(TestCase):
     @parameterized.expand(
         [
             ((5, 2, 1), (6, 10), 1),
-            ((5, 2, _Quotient.QUOTIENT), (6, 2), 2),
-            ((1, 2, _Quotient.QUOTIENT), (1, 10), 10),
+            ((5, 2, QUOTIENT), (6, 2), 2),
+            ((1, 2, QUOTIENT), (1, 10), 10),
         ]
     )
     def test_to_non_quotient(self, xyk, shape, expected_len):
@@ -192,7 +192,7 @@ class TestZephyrCartesianCoord(TestCase):
             len(ZephyrCartesianCoord(*xyk).to_non_quotient(ZephyrShape(*shape))), expected_len
         )
 
-    @parameterized.expand([((0, 1, _Quotient.QUOTIENT),), ((12, 3, _Quotient.QUOTIENT),)])
+    @parameterized.expand([((0, 1, QUOTIENT),), ((12, 3, QUOTIENT),)])
     def test_cartesian_to_zephyr_runs(self, xyk):
         ccoord = ZephyrCartesianCoord(*xyk)
         self.assertIs(ccoord.convert(CoordKind.TOPOLOGY).kind, CoordKind.TOPOLOGY)
@@ -200,8 +200,8 @@ class TestZephyrCartesianCoord(TestCase):
 
     @parameterized.expand(
         [
-            ((0, 0, _Quotient.QUOTIENT, 0, 0), (0, 1, _Quotient.QUOTIENT)),
-            ((1, 0, _Quotient.QUOTIENT, 0, 0), (1, 0, _Quotient.QUOTIENT)),
+            ((0, 0, QUOTIENT, 0, 0), (0, 1, QUOTIENT)),
+            ((1, 0, QUOTIENT, 0, 0), (1, 0, QUOTIENT)),
             ((1, 6, 3, 0, 1), (5, 12, 3)),
         ]
     )
@@ -226,7 +226,7 @@ class TestZephyrCartesianCoord(TestCase):
 
     def test_quotient_orders_after_nonquotient(self):
         nonq = ZephyrCartesianCoord(0, 1, 2)
-        quo = ZephyrCartesianCoord(0, 1, _Quotient.QUOTIENT)
+        quo = ZephyrCartesianCoord(0, 1, QUOTIENT)
         # (is_quotient, tuple): False < True, so non-quotient sorts first
         self.assertLess(nonq, quo)
 
@@ -248,10 +248,10 @@ class TestZephyrCartesianCoord(TestCase):
     def test_to_quotient(self):
         self.assertEqual(
             ZephyrCartesianCoord(5, 2, 1).to_quotient(),
-            ZephyrCartesianCoord(5, 2, _Quotient.QUOTIENT),
+            ZephyrCartesianCoord(5, 2, QUOTIENT),
         )
 
-    @parameterized.expand([((6, _Quotient.QUOTIENT),), ((_Infinite.INFINITE, 2),)])
+    @parameterized.expand([((6, QUOTIENT),), ((INFINITE, 2),)])
     def test_convert_to_linear_raises_error(self, shape):
         with self.assertRaises(ValueError):
             ZephyrCartesianCoord(5, 2, 1).convert(CoordKind.LINEAR, ZephyrShape(*shape))
@@ -279,7 +279,7 @@ class TestZephyrCoord(TestCase):
     @parameterized.expand(
         [
             ((0, 17, 4, 1, 0),),
-            ((1, 0, _Quotient.QUOTIENT, 0, 0),),
+            ((1, 0, QUOTIENT, 0, 0),),
             ((1, 2, 10, 1, 23),),
         ]
     )
@@ -291,9 +291,9 @@ class TestZephyrCoord(TestCase):
             ((1, 24, 0, 1, 12), (12, 2), False),  # All good except z_val
             ((1, 20, 3, 1, 12), (12, 6), False),  # All good except z_val
             ((0, 0, 0, 0, 0), (1, 1), True),
-            ((0, 0, 0, 0, 0), (1, _Quotient.QUOTIENT), False),
+            ((0, 0, 0, 0, 0), (1, QUOTIENT), False),
             ((0, 15, 2, 0, 0), (6, 4), False),
-            ((0, 3, _Quotient.QUOTIENT, 0, 2), (6, 4), False),
+            ((0, 3, QUOTIENT, 0, 2), (6, 4), False),
         ]
     )
     def test_is_shape_consistent(self, uwkjz, shape, expected):
@@ -303,13 +303,13 @@ class TestZephyrCoord(TestCase):
         [
             (
                 (0, 0, 0, 0, 0),
-                (6, _Quotient.QUOTIENT),
+                (6, QUOTIENT),
             ),
             (
                 (0, 15, 2, 0, 0),
                 (6, 4),
             ),
-            ((0, 15, _Quotient.QUOTIENT, 0, 0), (6, 4)),
+            ((0, 15, QUOTIENT, 0, 0), (6, 4)),
         ]
     )
     def test_to_non_quotient_raises_error(self, uwkjz, shape):
@@ -319,8 +319,8 @@ class TestZephyrCoord(TestCase):
     @parameterized.expand(
         [
             ((0, 3, 1, 0, 5), (6, 10), 1),
-            ((1, 12, _Quotient.QUOTIENT, 1, 5), (6, 2), 2),
-            ((0, 2, _Quotient.QUOTIENT, 1, 0), (1, 10), 10),
+            ((1, 12, QUOTIENT, 1, 5), (6, 2), 2),
+            ((0, 2, QUOTIENT, 1, 0), (1, 10), 10),
         ]
     )
     def test_to_non_quotient(self, uwkjz, shape, expected_len):
@@ -329,7 +329,7 @@ class TestZephyrCoord(TestCase):
         )
 
     @parameterized.expand(
-        [((0, 2, 4, 1, 5),), ((1, 3, 3, 0, 0),), ((1, 2, _Quotient.QUOTIENT, 1, 5),)]
+        [((0, 2, 4, 1, 5),), ((1, 3, 3, 0, 0),), ((1, 2, QUOTIENT, 1, 5),)]
     )
     def test_zephyr_to_cartesian_runs(self, uwkjz):
         zcoord = ZephyrCoord(*uwkjz)
@@ -337,7 +337,7 @@ class TestZephyrCoord(TestCase):
         self.assertIs(zcoord.convert(CoordKind.TOPOLOGY).kind, CoordKind.TOPOLOGY)
 
     @parameterized.expand(
-        [((0, 2, 4, 1, 5),), ((1, 3, 3, 0, 0),), ((1, 2, _Quotient.QUOTIENT, 1, 5),)]
+        [((0, 2, 4, 1, 5),), ((1, 3, 3, 0, 0),), ((1, 2, QUOTIENT, 1, 5),)]
     )
     def test_ccoord_to_zcoord(self, uwkjz):
         zcoord = ZephyrCoord(*uwkjz)
@@ -346,9 +346,9 @@ class TestZephyrCoord(TestCase):
 
     @parameterized.expand(
         [
-            ((0, 1, _Quotient.QUOTIENT),),
-            ((1, 0, _Quotient.QUOTIENT),),
-            ((12, 3, _Quotient.QUOTIENT),),
+            ((0, 1, QUOTIENT),),
+            ((1, 0, QUOTIENT),),
+            ((12, 3, QUOTIENT),),
         ]
     )
     def test_zcoord_to_ccoord(self, xyk):
@@ -359,7 +359,7 @@ class TestZephyrCoord(TestCase):
     def test_to_quotient(self):
         self.assertEqual(
             ZephyrCoord(0, 3, 1, 0, 2).to_quotient(),
-            ZephyrCoord(0, 3, _Quotient.QUOTIENT, 0, 2),
+            ZephyrCoord(0, 3, QUOTIENT, 0, 2),
         )
 
     def test_convert_invalid_kind_raises_error(self):
@@ -368,13 +368,13 @@ class TestZephyrCoord(TestCase):
 
     @parameterized.expand(
         [
-            (ZephyrCartesianCoord(0, 1, _Quotient.QUOTIENT),),  # different Coord subclass
+            (ZephyrCartesianCoord(0, 1, QUOTIENT),),  # different Coord subclass
             (5,),  # non-Coord
-            ((0, 0, _Quotient.QUOTIENT, 0, 0),),  # plain tuple
+            ((0, 0, QUOTIENT, 0, 0),),  # plain tuple
         ]
     )
     def test_eq_lt_notimplemented(self, other):
-        coord = ZephyrCoord(0, 0, _Quotient.QUOTIENT, 0, 0)
+        coord = ZephyrCoord(0, 0, QUOTIENT, 0, 0)
         self.assertIs(coord.__eq__(other), NotImplemented)
         self.assertIs(coord.__lt__(other), NotImplemented)
 
@@ -417,7 +417,7 @@ class TestConvertToLinear(TestCase):
             ZephyrCartesianCoord(0, 1, 2).convert(CoordKind.LINEAR)
 
     def test_linear_rejects_quotient_and_infinite_shape(self):
-        for shape in (ZephyrShape(2, _Quotient.QUOTIENT), ZephyrShape(_Infinite.INFINITE, 4)):
+        for shape in (ZephyrShape(2, QUOTIENT), ZephyrShape(INFINITE, 4)):
             with self.assertRaises(ValueError):
                 ZephyrCoord(0, 1, 2, 1, 0).convert(CoordKind.LINEAR, shape)
 
@@ -449,8 +449,8 @@ class TestConvertToLinear(TestCase):
 
     def test_linear_rejects_quotient_coord(self):
         for coord in (
-            ZephyrCoord(0, 1, _Quotient.QUOTIENT, 1, 0),
-            ZephyrCartesianCoord(0, 1, _Quotient.QUOTIENT),
+            ZephyrCoord(0, 1, QUOTIENT, 1, 0),
+            ZephyrCartesianCoord(0, 1, QUOTIENT),
         ):
             with self.assertRaises(ValueError):
                 coord.convert(CoordKind.LINEAR, ZephyrShape(2, 4))
