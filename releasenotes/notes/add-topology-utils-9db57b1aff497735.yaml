@@ -1,0 +1,35 @@
+---
+prelude: >
+    Add object-oriented topology utilities to ``dwave.graphs``, starting with
+    support for the Zephyr topology.
+features:
+  - |
+    Add the ``Zephyr`` topology accessor, available from ``dwave.graphs``.
+    ``Zephyr.nodes()`` and ``Zephyr.edges()`` enumerate the nodes and edges of a
+    Zephyr graph of a given shape, optionally filtered by edge kind and
+    expressed in a chosen coordinate kind.
+  - |
+    Add the ``ZephyrNode`` and ``ZephyrEdge`` classes, available from
+    ``dwave.graphs``. Nodes support querying their neighbors, incident edges,
+    and degree, each restricted by edge kind (internal, external, or odd) and
+    by an arbitrary coordinate filter. Nodes can also be translated in the
+    Cartesian plane, and subtracted to give the displacement between them.
+  - |
+    Add the ``ZephyrCoord`` and ``ZephyrCartesianCoord`` classes, available from
+    ``dwave.graphs``, representing a node in 5-term Zephyr coordinates and in
+    3-term Cartesian coordinates respectively. Both convert between the Zephyr,
+    Cartesian, and linear coordinate kinds, and can be expanded from a quotient
+    graph into the corresponding non-quotient coordinates.
+  - |
+    Add the ``ZephyrShape`` and ``ZephyrPlaneShift`` classes, available from
+    ``dwave.graphs``. ``ZephyrShape`` captures the grid and tile parameters of a
+    Zephyr graph, including quotient and infinite-grid variants, and validates
+    nodes, edges, and coordinates against them. ``ZephyrPlaneShift`` represents
+    a displacement in the Cartesian plane, supporting addition and scaling.
+  - |
+    Add the abstract base classes that these build on --- ``Topology``,
+    ``TopologyNode``, ``TopologyEdge``, ``Coord``, ``TopologyShape``,
+    ``TopologyPlaneShift``, and the neighbor mixins --- together with the
+    ``CoordKind``, ``EdgeKind``, and ``NodeKind`` enumerations. These are
+    available from ``dwave.graphs.topologies.common`` and define the extension
+    point for adding further topologies.
