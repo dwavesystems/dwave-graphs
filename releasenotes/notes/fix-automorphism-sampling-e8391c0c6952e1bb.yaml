@@ -1,0 +1,5 @@
+---
+fixes:
+  - |
+    Fix non-uniform automorphism sampling by composing Schreier representatives
+    in stabilizer order.

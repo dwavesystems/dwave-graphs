@@ -132,27 +132,6 @@ class Automorphisms(unittest.TestCase):
             ],
         )
 
-    def test_automorphism_sampling(self):
-        """Check the random sampling of automorphisms from the Schreier-Sims representation"""
-        graph = nx.cycle_graph(8)
-
-        result = schreier_rep(graph)
-        single_automorphism = sample_automorphisms(result.u_vector, seed=42)
-        multiple_automorphisms = sample_automorphisms(result.u_vector, num_samples=3, seed=42)
-
-        self.assertEqual(result.num_automorphisms, 16)
-        self.assertTrue(np.array_equal(single_automorphism, [np.array([3, 4, 5, 6, 7, 0, 1, 2])]))
-        self.assertTrue(
-            np.array_equal(
-                multiple_automorphisms,
-                [
-                    np.array([3, 4, 5, 6, 7, 0, 1, 2]),
-                    np.array([6, 5, 4, 3, 2, 1, 0, 7]),
-                    np.array([3, 4, 5, 6, 7, 0, 1, 2]),
-                ],
-            )
-        )
-
     def test_kreher(self):
         """Check the number of automorphisms, vertex orbits, and edge orbits of the graph from
         Example 7.6 in Kreher, D. L., & Stinson, D. R. (1999). Combinatorial algorithms:
@@ -789,6 +768,89 @@ class TestGraphColoring(unittest.TestCase):
         coloring = {0: 0, 1: 0, 2: 0, 3: 0, 99: 5}  # extra node 99
         with self.assertRaisesRegex(ValueError, "not in graph"):
             schreier_rep(graph, graph_coloring=coloring)
+
+
+class TestSampleAutomorphisms(unittest.TestCase):
+    @staticmethod
+    def _brute_force_automorphisms(graph):
+        """Compute all automorphisms of a graph in one-line notation with VF2."""
+        from networkx.algorithms.isomorphism import GraphMatcher
+
+        nodes = sorted(graph.nodes())
+        index = {v: i for i, v in enumerate(nodes)}
+        group = set()
+        for iso in GraphMatcher(graph, graph).isomorphisms_iter():
+            perm = [0] * len(nodes)
+            for v, w in iso.items():
+                perm[index[v]] = index[w]
+            group.add(tuple(perm))
+        return group
+
+    _SAMPLING_GRAPHS = {
+        "2xK3": nx.disjoint_union(nx.complete_graph(3), nx.complete_graph(3)),
+        "2xC4": nx.disjoint_union(nx.cycle_graph(4), nx.cycle_graph(4)),
+        "C4": nx.cycle_graph(4),
+        "Q3": nx.hypercube_graph(3),
+    }
+
+    def test_sample_automorphisms_reaches_every_automorphism(self):
+        """Every element of Aut(G) must be producible by ``sample_automorphisms``.
+
+        With 20·|Aut| uniform samples the chance of missing an element is negligible."""
+        for name, graph in self._SAMPLING_GRAPHS.items():
+            with self.subTest(graph=name):
+                graph = nx.convert_node_labels_to_integers(graph, ordering="sorted")
+                expected = self._brute_force_automorphisms(graph)
+                result = schreier_rep(graph)
+                self.assertEqual(result.num_automorphisms, len(expected))
+
+                samples = sample_automorphisms(
+                    result.u_vector,
+                    num_samples=20 * len(expected),
+                    seed=0,
+                    num_nodes=graph.number_of_nodes(),
+                )
+                sampled = {tuple(int(x) for x in g) for g in samples}
+                self.assertTrue(sampled <= expected, "sampler produced a non-automorphism")
+                missing = expected - sampled
+                self.assertFalse(
+                    missing, f"{len(missing)} of {len(expected)} automorphisms were not sampled"
+                )
+
+    def test_sample_automorphisms_is_uniform(self):
+        """Observed frequencies must be close to num_samples / |Aut(G)|.
+
+        With 200 samples per automorphism, a 35% tolerance accommodates random
+        variation while flagging substantial deviations from uniformity."""
+        for name, graph in self._SAMPLING_GRAPHS.items():
+            with self.subTest(graph=name):
+                graph = nx.convert_node_labels_to_integers(graph, ordering="sorted")
+                result = schreier_rep(graph)
+                num_samples = 200 * result.num_automorphisms
+                samples = sample_automorphisms(
+                    result.u_vector, num_samples=num_samples, seed=1, num_nodes=graph.number_of_nodes()
+                )
+                counts = {}
+                for g in samples:
+                    key = tuple(int(x) for x in g)
+                    counts[key] = counts.get(key, 0) + 1
+
+                expected = num_samples / result.num_automorphisms
+                self.assertEqual(len(counts), result.num_automorphisms)
+                self.assertLess(max(counts.values()), 1.35 * expected)
+                self.assertGreater(min(counts.values()), 0.65 * expected)
+
+    def test_sample_automorphisms_independent_of_transversal_order(self):
+        """The ordering of transversals in ``u_vector`` must not matter."""
+        graph = nx.complete_graph(4)
+        expected = self._brute_force_automorphisms(graph)
+        result = schreier_rep(graph)
+
+        for label, u_vector in (("as found", result.u_vector), ("reversed", result.u_vector[::-1])):
+            with self.subTest(order=label):
+                samples = sample_automorphisms(u_vector, num_samples=20 * len(expected), seed=2)
+                sampled = {tuple(int(x) for x in g) for g in samples}
+                self.assertEqual(sampled, expected)
 
 
 if __name__ == "__main__":

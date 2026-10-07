@@ -933,9 +933,7 @@ def sample_automorphisms(
 
     Randomly samples one coset representative from each non-trivial left
     transversal and takes the product, guaranteeing uniform sampling. The
-    automorphisms can be composed uniformly regardless of the ordering of
-    the left transversals in 'u_vector'. All products involving identity
-    automorphisms are ignored.
+    automorphisms must be composed in the order of the stabilizer indices.
 
     Args:
         u_vector: Coset representatives grouped by stabilizer index.
@@ -954,9 +952,9 @@ def sample_automorphisms(
         >>> graph = nx.cycle_graph(8)
         >>> result = schreier_rep(graph)
         >>> sample_automorphisms(result.u_vector, seed=42)
-        [array([3, 4, 5, 6, 7, 0, 1, 2])]
+        [array([0, 7, 6, 5, 4, 3, 2, 1])]
         >>> sample_automorphisms(result.u_vector, num_samples=2, seed=42)
-        [array([3, 4, 5, 6, 7, 0, 1, 2]), array([6, 5, 4, 3, 2, 1, 0, 7])]
+        [array([0, 7, 6, 5, 4, 3, 2, 1]), array([4, 5, 6, 7, 0, 1, 2, 3])]
     """
     rng = np.random.default_rng(seed)
 
@@ -975,17 +973,20 @@ def sample_automorphisms(
             "cannot be inferred)"
         )
 
-    u_counts = [len(u_i) for u_i in u_vector]
     sampled_automorphisms = []
+    identity = np.arange(num_nodes)
+    stab = [int(np.argmax(u_i[0] != identity)) for u_i in u_vector]
+    order = sorted(range(len(u_vector)), key=lambda j: stab[j])
+    u_counts = [len(u_vector[j]) for j in order]
 
     for _ in range(num_samples):
         sample_indices = rng.integers(low=-1, high=u_counts)
-        g_product = np.arange(num_nodes)
+        g_product = identity
 
-        for i, u_i in enumerate(u_vector):
+        for i, transversal_index in enumerate(order):
             if sample_indices[i] >= 0:
-                g = u_i[sample_indices[i]]
-                g_product = g[g_product]  # g ∘ g_product
+                g = u_vector[transversal_index][sample_indices[i]]
+                g_product = g_product[g]  # g_product ∘ g  ->  u_0 ∘ u_1 ∘ ... ∘ u_k
 
         sampled_automorphisms.append(g_product)
 
