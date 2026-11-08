@@ -1,0 +1,4 @@
+---
+fixes:
+  - |
+    Handle empty transversal sublists in ``sample_automorphisms``.

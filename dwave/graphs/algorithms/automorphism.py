@@ -958,8 +958,10 @@ def sample_automorphisms(
     """
     rng = np.random.default_rng(seed)
 
-    if u_vector:
-        inferred = len(u_vector[0][0])
+    non_trivial = [u_i for u_i in u_vector if u_i]
+
+    if non_trivial:
+        inferred = len(non_trivial[0][0])
         if num_nodes is not None and num_nodes != inferred:
             raise ValueError(
                 f"num_nodes ({num_nodes}) does not match the permutation length "
@@ -975,9 +977,9 @@ def sample_automorphisms(
 
     sampled_automorphisms = []
     identity = np.arange(num_nodes)
-    stab = [int(np.argmax(u_i[0] != identity)) for u_i in u_vector]
-    order = sorted(range(len(u_vector)), key=lambda j: stab[j])
-    u_counts = [len(u_vector[j]) for j in order]
+    stab = [int(np.argmax(u_i[0] != identity)) for u_i in non_trivial]
+    order = sorted(range(len(non_trivial)), key=lambda j: stab[j])
+    u_counts = [len(non_trivial[j]) for j in order]
 
     for _ in range(num_samples):
         sample_indices = rng.integers(low=-1, high=u_counts)
@@ -985,7 +987,7 @@ def sample_automorphisms(
 
         for i, transversal_index in enumerate(order):
             if sample_indices[i] >= 0:
-                g = u_vector[transversal_index][sample_indices[i]]
+                g = non_trivial[transversal_index][sample_indices[i]]
                 g_product = g_product[g]  # g_product ∘ g  ->  u_0 ∘ u_1 ∘ ... ∘ u_k
 
         sampled_automorphisms.append(g_product)

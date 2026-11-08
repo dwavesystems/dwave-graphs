@@ -852,6 +852,23 @@ class TestSampleAutomorphisms(unittest.TestCase):
                 sampled = {tuple(int(x) for x in g) for g in samples}
                 self.assertEqual(sampled, expected)
 
+    def test_sample_automorphisms_empty_transversals(self):
+        """Empty coset transversal sublists should be ignored gracefully."""
+        graph = nx.cycle_graph(4)
+        result = schreier_rep(graph)
+        u_vector_with_empty = [[]] + result.u_vector + [[]]
+        samples = sample_automorphisms(u_vector_with_empty, num_samples=5, seed=42)
+        expected_samples = sample_automorphisms(result.u_vector, num_samples=5, seed=42)
+        self.assertEqual(len(samples), 5)
+        for s1, s2 in zip(samples, expected_samples):
+            self.assertTrue(np.array_equal(s1, s2))
+
+        # All trivial transversals
+        trivial_samples = sample_automorphisms([[], []], num_samples=3, num_nodes=4)
+        self.assertEqual(len(trivial_samples), 3)
+        for s in trivial_samples:
+            self.assertTrue(np.array_equal(s, np.arange(4)))
+
 
 if __name__ == "__main__":
     unittest.main()
