@@ -4,7 +4,7 @@
 .. image:: https://codecov.io/gh/dwavesystems/dwave-graphs/branch/main/graph/badge.svg
     :target: https://codecov.io/gh/dwavesystems/dwave-graphs
 
-.. image:: https://circleci.com/gh/dwavesystems/dwave-graphs.svg?style=svg
+.. image:: https://circleci.com/gh/dwavesystems/dwave-graphs.svg?style=shield
     :target: https://circleci.com/gh/dwavesystems/dwave-graphs
 
 ============
@@ -67,11 +67,3 @@ Contributing
 
 Ocean's `contributing guide <https://docs.dwavequantum.com/en/latest/ocean/contribute.html>`_
 has guidelines for contributing to Ocean packages.
-
-Release Notes
--------------
-
-We use `reno <https://docs.openstack.org/reno/>`_ to manage release notes.
-
-See reno's `user guide <https://docs.openstack.org/reno/latest/user/usage.html>`_
-for details.
