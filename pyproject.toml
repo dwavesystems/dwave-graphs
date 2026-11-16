@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
 ]
 dependencies = [
     "dimod>=0.12.22,<0.13",     # includes migrated BQM generators
@@ -43,9 +44,9 @@ changelog = [
     "reno==4.1.0",
 ]
 dev = [
-    "numpy==2.5.3",         # latest as of September 2026
-    "dimod==0.12.22",       # latest that includes the migrated BQM generators
-    "networkx==3.4.2",      # latest that supports 3.10 (and numpy 2)
+    "numpy==2.5.5",         # latest as of November 2026
+    "dimod==0.12.23",       # latest as of November 2026
+    "networkx==3.6.1",      # latest that supports 3.11 (and numpy 2)
     {include-group = "changelog"},
 ]
 docs = [
