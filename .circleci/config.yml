@@ -7,8 +7,6 @@ orbs:
 jobs:
   test-linux:
     parameters:
-      dependency-versions:
-        type: string
       python-version:
         type: string
 
@@ -19,18 +17,12 @@ jobs:
       - checkout
 
       - run: &create-venv-install-deps
-          name: Create virtual environment and install dependencies
+          name: Create virtual environment and install oldest dependencies
           command: |
             python -m venv env
             . env/bin/activate
             pip install --upgrade pip
-            pip install --group dev --group test
-
-      - run:
-          name: Override dependencies
-          command: |
-            . env/bin/activate
-            pip install --upgrade << parameters.dependency-versions >>
+            pip install --group deps-oldest --group test
 
       - run: &run-tests
           name: Run unittests
@@ -38,6 +30,16 @@ jobs:
             . env/bin/activate
             coverage run -m unittest
             coverage xml
+
+      - run:
+          name: Install package and upgrade dependencies to latest
+          command: |
+            . env/bin/activate
+            pip install --upgrade --upgrade-strategy=eager .
+
+      - run:
+          <<: *run-tests
+          name: Run unittests with latest package dependencies
 
       - codecov/upload: &upload-python-code-coverage
           file: coverage.xml
@@ -230,10 +232,7 @@ workflows:
       - test-linux:
           matrix:
             parameters:
-              python-version: &python-versions ["3.10", "3.11", "3.12", "3.13", "3.14"]
-              dependency-versions: [&dependencies-oldest "dimod==0.12.22 networkx==3.2 numpy==2",
-                                    &dependencies-latest "dimod networkx numpy",
-                                    ]
+              python-version: &python-versions ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
       - test-osx:
           matrix:

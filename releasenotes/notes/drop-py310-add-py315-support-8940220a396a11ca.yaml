@@ -1,0 +1,7 @@
+---
+upgrade:
+  - |
+    Drop support for Python 3.10.
+features:
+  - |
+    Add support for Python 3.15.
