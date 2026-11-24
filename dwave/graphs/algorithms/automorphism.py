@@ -23,12 +23,7 @@ import networkx as nx
 import numpy as np
 from numpy.typing import NDArray
 
-__all__ = [
-    "edge_orbits",
-    "sample_automorphisms",
-    "schreier_rep",
-    "vertex_orbits",
-]
+__all__ = ["edge_orbits", "sample_automorphisms", "schreier_rep", "vertex_orbits"]
 
 
 def _safe_sort(nodes):
@@ -44,8 +39,8 @@ class ComponentInfo:
     """Container for per-component data used during automorphism discovery on disjoint graphs."""
 
     u_vector: list
-    nodes: NDArray
-    best_perm: NDArray
+    nodes: NDArray[np.integer]
+    best_perm: NDArray[np.integer]
 
 
 class EnterMode(Enum):
@@ -108,14 +103,19 @@ class SchreierContext:
         self._nodes_reached: int = 0
         self._depth: int = 0
 
-        self._u_map: dict[np.intp, int] = {}
+        if self._num_nodes <= np.iinfo(np.uint16).max:
+            self._index_dtype = np.dtype(np.uint16)
+        else:
+            self._index_dtype = np.dtype(np.uint32)
+
+        self._u_map: dict[np.integer, int] = {}
         self._u_len: int = 0
         self._u_vector: list = []
-        self._u_vector_inv: list[list[NDArray[np.intp]]] = []
+        self._u_vector_inv: list[list[NDArray[np.integer] | None]] = []
 
-        self._identity: NDArray[np.intp] = np.arange(self._num_nodes, dtype=np.intp)
+        self._identity: NDArray[np.integer] = np.arange(self._num_nodes, dtype=self._index_dtype)
 
-        self._best_perm: NDArray = np.arange(self._num_nodes)
+        self._best_perm: NDArray[np.integer] = np.arange(self._num_nodes)
         self._best_perm_exist: bool = False
         self._compare_adj: bool = False
         self._trace_history: list = []
@@ -127,11 +127,6 @@ class SchreierContext:
         self._min_color_degree: list[int] = [0] * self._num_nodes
         self._max_color_degree: list[int] = [0] * self._num_nodes
         self._active_vertices: list[list[int]] = [[] for _ in range(self._num_nodes)]
-
-        if self._num_nodes <= 65535:
-            self._color_dtype: np.dtype = np.uint16
-        else:
-            self._color_dtype: np.dtype = np.uint32
 
     @property
     def leaf_nodes(self) -> int:
@@ -156,12 +151,12 @@ class SchreierContext:
         return self._node_to_index
 
     @property
-    def u_map(self) -> dict[np.intp, int]:
+    def u_map(self) -> dict[np.integer, int]:
         """Map from coset representative group index to stabilizer index."""
         return self._u_map
 
     @property
-    def u_vector(self) -> list[list[NDArray[np.intp]]]:
+    def u_vector(self) -> list[list[NDArray[np.integer]]]:
         """Coset representatives grouped by stabilizer index."""
         return self._u_vector
 
@@ -196,7 +191,7 @@ class SchreierContext:
         with the original node labels."""
         return edge_orbits(self._u_vector, self._graph_edges, index_to_node=self._index_to_node)
 
-    def _test_composability(self, g: NDArray[np.intp]) -> tuple[int, NDArray[np.intp]]:
+    def _test_composability(self, g: NDArray[np.integer]) -> tuple[int, NDArray[np.integer]]:
         """Test if an automorphism is composable from coset representatives.
 
         Based on Algorithm 6.10 from Kreher, D. L., & Stinson, D. R. (1999).
@@ -230,13 +225,21 @@ class SchreierContext:
             else:
                 return next_diff, g
 
-            g = self._u_vector_inv[self._u_map[next_diff]][i][g]
+            inverse_row = self._u_vector_inv[self._u_map[next_diff]]
+            h_inv = inverse_row[i]
+
+            if h_inv is None:
+                h_inv = np.empty_like(self._identity)
+                h_inv[h] = self._identity
+                inverse_row[i] = h_inv
+
+            g = h_inv[g]
             mask = g[next_diff:] != self._identity[next_diff:]
             index = mask.argmax()
 
         return self._num_nodes, g
 
-    def _enter(self, g: NDArray[np.intp], mode: EnterMode = EnterMode.RECURSE) -> None:
+    def _enter(self, g: NDArray[np.integer], mode: EnterMode = EnterMode.RECURSE) -> None:
         """Add automorphism if it can't be composed from coset representatives.
 
         Based on Algorithm 6.11 from Kreher, D. L., & Stinson, D. R. (1999).
@@ -263,16 +266,7 @@ class SchreierContext:
         if i == self._num_nodes:
             return
 
-        if i not in self._u_map:
-            self._u_map[i] = self._u_len
-            self._u_len += 1
-            self._u_vector.append([])
-            self._u_vector_inv.append([])
-
-        self._u_vector[self._u_map[i]].append(g)
-        g_inv = np.empty(self._num_nodes, dtype=np.intp)
-        g_inv[g] = self._identity
-        self._u_vector_inv[self._u_map[i]].append(g_inv)
+        self._add_reps(g, i)
 
         if mode is EnterMode.NO_RECURSE:
             return
@@ -284,6 +278,28 @@ class SchreierContext:
                     self._enter(f, mode=EnterMode.NO_RECURSE)
                 else:
                     self._enter(f)
+
+    def _add_reps(self, reps: NDArray[np.integer], i: int) -> None:
+        """Store one or more coset representatives and their inverses without sifting.
+        
+        Args:
+            reps: A 1D permutation array or a list of permutation arrays in one-line notation.
+            i: The stabilizer index, equal to the first position moved by each permutation in ``reps``.
+        """
+        row = self._u_map.get(i)
+        if row is None:
+            row = self._u_len
+            self._u_map[i] = row
+            self._u_len += 1
+            self._u_vector.append([])
+            self._u_vector_inv.append([])
+
+        if reps.ndim == 1:
+            self._u_vector[row].append(reps)
+            self._u_vector_inv[row].append(None)
+        else:
+            self._u_vector[row].extend(reps)
+            self._u_vector_inv[row].extend([None] * len(reps))
 
     def _refine(
         self,
@@ -600,8 +616,8 @@ class SchreierContext:
                 self._best_perm[:] = perm_candidate
 
             elif compare_result == 1:
-                perm_transformed = np.empty(self._num_nodes, dtype=np.intp)
                 perm_candidate = list(chain.from_iterable(partition))
+                perm_transformed = np.empty_like(self._identity)
                 perm_transformed[perm_candidate] = self._best_perm
                 if self._is_automorphism(perm_transformed):
                     self._enter(perm_transformed)
@@ -651,7 +667,7 @@ class SchreierContext:
 
             self._depth -= 1
 
-    def _compare(self, perm: NDArray[np.intp], first_split: int) -> int:
+    def _compare(self, perm: NDArray[np.integer], first_split: int) -> int:
         """Compare canonical adjacency matrix against itself under a partial permutation.
 
         At the first differing entry, returns whether the partial permutatation has
@@ -721,7 +737,7 @@ class SchreierContext:
 
         return cert_hash.digest()
 
-    def _is_automorphism(self, perm: NDArray[np.intp]) -> bool:
+    def _is_automorphism(self, perm: NDArray[np.integer]) -> bool:
         neighbours = self._neighbours
         for u, nbrs in enumerate(neighbours):
             pu_nbrs = neighbours[perm[u]]
@@ -732,7 +748,7 @@ class SchreierContext:
 
     def _initial_partition(
         self,
-    ) -> tuple[list[set[int] | None], np.ndarray, np.ndarray, int]:
+    ) -> tuple[list[set[int] | None], NDArray[np.integer], NDArray[np.integer], int]:
         """Initialize the initial partition for a graph.
 
         Currently this only supports graphs whose vertices are initially the same
@@ -746,8 +762,8 @@ class SchreierContext:
             color: An array mapping each vertex to its current color.
             num_colors: The number of colors in the initial partition.
         """
-        trace = np.zeros(self._num_nodes, dtype=self._color_dtype)
-        color = np.zeros(self._num_nodes, dtype=self._color_dtype)
+        trace = np.zeros(self._num_nodes, dtype=self._index_dtype)
+        color = np.zeros(self._num_nodes, dtype=self._index_dtype)
         graph_coloring = self._graph_coloring
 
         if graph_coloring is None:
@@ -771,7 +787,7 @@ class SchreierContext:
 
 
 def vertex_orbits(
-    u_vector: list[list[NDArray[np.intp]]],
+    u_vector: list[list[NDArray[np.integer]]],
     nodes: list[int],
     index_to_node: Mapping[int, int] | None = None,
 ) -> list[list[int]]:
@@ -845,7 +861,7 @@ def vertex_orbits(
 
 
 def edge_orbits(
-    u_vector: list[list[NDArray[np.intp]]],
+    u_vector: list[list[NDArray[np.integer]]],
     edges: list[tuple[int, int]],
     index_to_node: Mapping[int, int] | None = None,
 ) -> list[list[int]]:
@@ -924,11 +940,11 @@ def edge_orbits(
 
 
 def sample_automorphisms(
-    u_vector: list[list[NDArray[np.intp]]],
+    u_vector: list[list[NDArray[np.integer]]],
     num_samples: int = 1,
     seed: int | None = None,
     num_nodes: int | None = None,
-) -> list[NDArray[np.intp]]:
+) -> list[NDArray[np.integer]]:
     """Uniformly sample automorphisms from the Schreier-Sims representation.
 
     Randomly samples one coset representative from each non-trivial left
@@ -1043,7 +1059,7 @@ def schreier_rep(
     ctx = SchreierContext(graph, node_order=node_order)
 
     # group isomorphic components together
-    components = [ctx._graph.subgraph(c).copy() for c in nx.connected_components(ctx._graph)]
+    components = [ctx._graph.subgraph(c) for c in nx.connected_components(ctx._graph)]
 
     unique_components = {}
     for comp in components:
@@ -1062,32 +1078,53 @@ def schreier_rep(
         ctx._leaf_nodes += ctx_comp.leaf_nodes
 
         unique_components.setdefault(ctx_comp._certificate(), []).append(
-            ComponentInfo(ctx_comp._u_vector, np.array(sorted(comp.nodes())), ctx_comp._best_perm)
+            ComponentInfo(
+                ctx_comp._u_vector,
+                np.array(sorted(comp.nodes()), dtype=ctx._index_dtype),
+                ctx_comp._best_perm,
+            )
         )
 
-    # enter the local automorphisms
-    graph_nnodes = ctx._graph.number_of_nodes()
-    for identical_components in unique_components.values():
-        for comp in identical_components:
-            for u in chain.from_iterable(comp.u_vector):
-                u_global = np.arange(graph_nnodes)
-                u_global[comp.nodes] = u_global[comp.nodes][u]
-                ctx._enter(u_global, mode=EnterMode.NO_RECURSE)
-
-    # enter swap automorphisms
     for comps in unique_components.values():
-        for i in range(len(comps) - 1):
-            i_nodes = comps[i].nodes
-            j_nodes = comps[i + 1].nodes
+        canonical_nodes = [comp.nodes[comp.best_perm] for comp in comps]
 
-            # swap automorphisms must be entered in the canonical basis
-            i_canon_perm = comps[i].best_perm
-            j_canon_perm = comps[i + 1].best_perm
-            i_canon = i_nodes[i_canon_perm]
-            j_canon = j_nodes[j_canon_perm]
+        for a, comp in enumerate(comps):
+            # local coset representatives for each component are entered in the global context
+            local_identity = np.arange(len(comp.nodes), dtype=ctx._index_dtype)
+            first_transversal = []
+            first_node = int(comp.nodes[0])
 
-            u_global = np.arange(graph_nnodes)
-            u_global[i_canon], u_global[j_canon] = u_global[j_canon], u_global[i_canon]
-            ctx._enter(u_global, mode=EnterMode.RECURSE_ONCE)
+            for transversal in comp.u_vector:
+                local_stab = int(np.argmax(transversal[0] != local_identity))
+                stab_index = int(comp.nodes[local_stab])
+                is_first_transversal = stab_index == first_node
+
+                for rep in transversal:
+                    u_global = ctx._identity.copy()
+                    u_global[comp.nodes] = comp.nodes[rep]
+                    ctx._add_reps(u_global, stab_index)
+                    if is_first_transversal:
+                        first_transversal.append(rep)  # retain local permutations
+
+            comp.u_vector = []
+            component_slice = slice(first_node, first_node + len(comp.nodes))
+            first_images = comp.nodes[np.stack(first_transversal)] if first_transversal else None
+
+            # swap automorphisms must move the first node of the component being swapped, so only
+            # the first transversal is needed to construct the swap representatives between components
+            first_node = int(comp.nodes[0])
+            batch_size = len(first_transversal) + 1
+            a_canon = canonical_nodes[a]
+
+            for component_index in range(a + 1, len(comps)):
+                b_canon = canonical_nodes[component_index]
+                batch = np.tile(ctx._identity, (batch_size, 1))
+                batch[:, a_canon] = b_canon
+                batch[:, b_canon] = a_canon
+
+                if first_images is not None:
+                    batch[1:, component_slice] = batch[0, first_images]
+
+                ctx._add_reps(batch, first_node)
 
     return ctx

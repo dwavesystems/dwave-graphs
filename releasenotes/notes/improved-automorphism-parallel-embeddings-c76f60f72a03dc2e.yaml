@@ -1,0 +1,9 @@
+---
+feature:
+  - |
+    Improve the performance of ``schreier_rep`` for graphs with many
+    isomorphic components, such as those representing parallel embeddings.
+upgrade:
+  - |
+    Permutation arrays in ``u_vector`` now use ``numpy.uint16`` or
+    ``numpy.uint32``, depending on graph size, instead of ``numpy.intp``.
