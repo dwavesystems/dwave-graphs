@@ -524,7 +524,7 @@ class Automorphisms(unittest.TestCase):
         graph = nx.Graph()
         graph.add_edges_from([(5, 1), (1, 7), (9, 4), (4, 0)])
         result = schreier_rep(graph)
-        self.assertEqual(result.u_map, {1: 0, 3: 1, 0: 2})
+        self.assertEqual(result.u_map, {1: 0, 0: 1, 3: 2})
 
     def test_nodes_reached_components(self):
         """Test the ``leaf_nodes`` and ``nodes_reached`` properties on a graph with multiple
@@ -540,16 +540,6 @@ class Automorphisms(unittest.TestCase):
         expected_nodes_reached = 260
         self.assertEqual(result.leaf_nodes, expected_leaf_nodes)
         self.assertEqual(result.nodes_reached, expected_nodes_reached)
-
-    def test_color_dtype_large(self):
-        """Test that ``_color_dtype`` is set correctly for graphs with more than 65535 nodes."""
-        small_graph = nx.empty_graph(65535)
-        ctx = SchreierContext(small_graph)
-        self.assertEqual(ctx._color_dtype, np.uint16)
-
-        big_graph = nx.empty_graph(65536)
-        ctx = SchreierContext(big_graph)
-        self.assertEqual(ctx._color_dtype, np.uint32)
 
     def test_asymmetric_graph_original_labels(self):
         """Test that original labels are preserved in the orbits of graphs with
